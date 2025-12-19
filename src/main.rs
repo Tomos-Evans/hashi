@@ -292,7 +292,7 @@ fn app() -> Html {
             spawn_local(async move {
                 let puzzle_id = puzzle_id_from_url();
 
-                match Request::get("/puzzles/data.json").send().await {
+                match Request::get("puzzles/data.json").send().await {
                     Ok(resp) => {
                         web_sys::console::log_1(&"Puzzle loaded".into());
                         if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await {
