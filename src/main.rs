@@ -358,7 +358,10 @@ fn game(props: &GameProps) -> Html {
         let puzzle_id = puzzle_id.clone();
         use_effect_with(puzzle_id.clone(), move |_| {
             spawn_local(async move {
-                match Request::get("/puzzles/data.json").send().await {
+                let data_url = get_data_json_url();
+                web_sys::console::log_1(&format!("Fetching from: {}", data_url).into());
+                
+                match Request::get(&data_url).send().await {
                     Ok(resp) => {
                         if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await {
                             if grids.is_empty() {
@@ -378,7 +381,6 @@ fn game(props: &GameProps) -> Html {
                                     puzzle_id: puzzle_id.clone(),
                                 });
                             } else {
-                                // Puzzle not found - pick a random one
                                 web_sys::console::error_1(
                                     &format!(
                                         "Puzzle ID '{}' not found, redirecting to random puzzle",
@@ -387,7 +389,6 @@ fn game(props: &GameProps) -> Html {
                                     .into(),
                                 );
 
-                                // Show error to user
                                 if let Some(window) = web_sys::window() {
                                     let _ = window.alert_with_message(&format!(
                                         "Puzzle '{}' not found. Loading a random puzzle instead.",
@@ -436,13 +437,16 @@ fn game(props: &GameProps) -> Html {
                 <button
                     onclick={on_back}
                     style="
-                        padding: 8px 20px;
-                        font-size: 14px;
+                        padding: 24px 38px;
+                        font-size: 24px;
                         background: #2196F3;
                         color: white;
                         border: none;
-                        border-radius: 6px;
+                        border-radius: 8px;
                         cursor: pointer;
+                        font-weight: 500;
+                        min-height: 80px;
+                        touch-action: manipulation;
                     "
                 >
                     {"← Back to Home"}
@@ -450,13 +454,16 @@ fn game(props: &GameProps) -> Html {
                 <button
                     onclick={on_new_puzzle}
                     style="
-                        padding: 8px 20px;
-                        font-size: 14px;
+                        padding: 24px 38px;
+                        font-size: 24px;
                         background: #8BC34A;
                         color: white;
                         border: none;
-                        border-radius: 6px;
+                        border-radius: 8px;
                         cursor: pointer;
+                        font-weight: 500;
+                        min-height: 80px;
+                        touch-action: manipulation;
                     "
                 >
                     {"🎲 New Random Puzzle"}
@@ -475,7 +482,10 @@ fn random_game_redirect() -> Html {
         let navigator = navigator.clone();
         use_effect_with((), move |_| {
             spawn_local(async move {
-                match Request::get("/puzzles/data.json").send().await {
+                let data_url = get_data_json_url();
+                web_sys::console::log_1(&format!("Fetching from: {}", data_url).into());
+                
+                match Request::get(&data_url).send().await {
                     Ok(resp) => {
                         if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await
                             && !grids.is_empty()
@@ -926,4 +936,39 @@ fn render_bridges(state: &UseStateHandle<GameState>) -> Html {
             })
         })
         .collect()
+}
+
+/* =======================
+   Helper Functions
+   ======================= */
+
+fn get_base_path() -> String {
+    if let Some(window) = web_sys::window() {
+        if let Some(document) = window.document() {
+            if let Some(base) = document.query_selector("base").ok().flatten() {
+                if let Some(href) = base.get_attribute("href") {
+                    return href;
+                }
+            }
+        }
+        
+        // Fallback: use the origin + pathname up to the app root
+        if let Ok(location) = window.location().pathname() {
+            // For GitHub Pages: /repo-name/ -> return /repo-name/
+            // For local: / -> return /
+            let segments: Vec<&str> = location.split('/').filter(|s| !s.is_empty()).collect();
+            
+            // If we're on a sub-route like /game/123, extract the base
+            // Check if first segment looks like a repo name (not 'game', 'rules', etc.)
+            if !segments.is_empty() && !matches!(segments[0], "game" | "rules" | "404") {
+                return format!("/{}/", segments[0]);
+            }
+        }
+    }
+    
+    "/".to_string()
+}
+
+fn get_data_json_url() -> String {
+    format!("{}puzzles/data.json", get_base_path())
 }
