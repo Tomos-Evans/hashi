@@ -1,17 +1,17 @@
-use std::collections::HashMap;
 use gloo::net::http::Request;
 use serde::Deserialize;
+use std::collections::HashMap;
+use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 
 fn main() {
     yew::Renderer::<App>::new().render();
 }
 
 /* =======================
-   Routes
-   ======================= */
+Routes
+======================= */
 
 #[derive(Clone, Routable, PartialEq)]
 enum Route {
@@ -29,8 +29,8 @@ enum Route {
 }
 
 /* =======================
-   Data model
-   ======================= */
+Data model
+======================= */
 
 #[derive(Clone, Deserialize)]
 struct Grid {
@@ -48,8 +48,8 @@ struct Island {
 }
 
 /* =======================
-   Game state
-   ======================= */
+Game state
+======================= */
 
 #[derive(Clone)]
 struct GameState {
@@ -63,7 +63,11 @@ struct GameState {
 impl Default for GameState {
     fn default() -> Self {
         GameState {
-            grid: Grid { width: 0, height: 0, islands: vec![] },
+            grid: Grid {
+                width: 0,
+                height: 0,
+                islands: vec![],
+            },
             bridges: HashMap::new(),
             selected: None,
             shuddered_island: None,
@@ -73,8 +77,8 @@ impl Default for GameState {
 }
 
 /* =======================
-   Rule helpers
-   ======================= */
+Rule helpers
+======================= */
 
 impl GameState {
     fn island(&self, id: u32) -> &Island {
@@ -82,7 +86,8 @@ impl GameState {
     }
 
     fn bridges_for(&self, id: u32) -> u8 {
-        self.bridges.iter()
+        self.bridges
+            .iter()
             .filter(|((a, b), _)| *a == id || *b == id)
             .map(|(_, c)| *c)
             .sum()
@@ -162,7 +167,7 @@ impl GameState {
             visited.insert(current);
 
             // Find all connected islands
-            for ((a, b), _) in &self.bridges {
+            for (a, b) in self.bridges.keys() {
                 if *a == current && !visited.contains(b) {
                     stack.push(*b);
                 } else if *b == current && !visited.contains(a) {
@@ -217,8 +222,8 @@ fn crosses(a1: &Island, b1: &Island, a2: &Island, b2: &Island) -> bool {
 }
 
 /* =======================
-   Page Components
-   ======================= */
+Page Components
+======================= */
 
 #[function_component(Home)]
 fn home() -> Html {
@@ -362,7 +367,9 @@ fn game(props: &GameProps) -> Html {
                             }
 
                             if let Some(grid) = grids.get(&puzzle_id) {
-                                web_sys::console::log_1(&format!("Loaded puzzle {}", puzzle_id).into());
+                                web_sys::console::log_1(
+                                    &format!("Loaded puzzle {}", puzzle_id).into(),
+                                );
                                 state.set(GameState {
                                     grid: grid.clone(),
                                     bridges: HashMap::new(),
@@ -372,13 +379,22 @@ fn game(props: &GameProps) -> Html {
                                 });
                             } else {
                                 // Puzzle not found - pick a random one
-                                web_sys::console::error_1(&format!("Puzzle ID '{}' not found, redirecting to random puzzle", puzzle_id).into());
-                                
+                                web_sys::console::error_1(
+                                    &format!(
+                                        "Puzzle ID '{}' not found, redirecting to random puzzle",
+                                        puzzle_id
+                                    )
+                                    .into(),
+                                );
+
                                 // Show error to user
                                 if let Some(window) = web_sys::window() {
-                                    let _ = window.alert_with_message(&format!("Puzzle '{}' not found. Loading a random puzzle instead.", puzzle_id));
+                                    let _ = window.alert_with_message(&format!(
+                                        "Puzzle '{}' not found. Loading a random puzzle instead.",
+                                        puzzle_id
+                                    ));
                                 }
-                                
+
                                 let rand_index = rand::random_range(0..grids.len());
                                 let (id, _) = grids.iter().nth(rand_index).unwrap();
                                 navigator.push(&Route::Game { id: id.clone() });
@@ -388,7 +404,9 @@ fn game(props: &GameProps) -> Html {
                     Err(err) => {
                         web_sys::console::error_1(&format!("{err:?}").into());
                         if let Some(window) = web_sys::window() {
-                            let _ = window.alert_with_message("Failed to load puzzles. Please check your connection.");
+                            let _ = window.alert_with_message(
+                                "Failed to load puzzles. Please check your connection.",
+                            );
                         }
                     }
                 }
@@ -459,12 +477,12 @@ fn random_game_redirect() -> Html {
             spawn_local(async move {
                 match Request::get("/puzzles/data.json").send().await {
                     Ok(resp) => {
-                        if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await {
-                            if !grids.is_empty() {
-                                let rand_index = rand::random_range(0..grids.len());
-                                let (id, _) = grids.iter().nth(rand_index).unwrap();
-                                navigator.push(&Route::Game { id: id.clone() });
-                            }
+                        if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await
+                            && !grids.is_empty()
+                        {
+                            let rand_index = rand::random_range(0..grids.len());
+                            let (id, _) = grids.iter().nth(rand_index).unwrap();
+                            navigator.push(&Route::Game { id: id.clone() });
                         }
                     }
                     Err(err) => {
@@ -518,8 +536,8 @@ fn not_found() -> Html {
 }
 
 /* =======================
-   Main App with Router
-   ======================= */
+Main App with Router
+======================= */
 
 fn switch(routes: Route) -> Html {
     match routes {
@@ -541,8 +559,8 @@ fn app() -> Html {
 }
 
 /* =======================
-   Game Rendering
-   ======================= */
+Game Rendering
+======================= */
 
 fn render_game(state: &UseStateHandle<GameState>) -> Html {
     if state.grid.islands.is_empty() {
@@ -570,7 +588,7 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                         }
                     }
                 }
-                
+
                 state.set(s);
             })
         };
@@ -645,8 +663,8 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                                 />
                             </filter>
                         </defs>
-                        { render_bridges(&state) }
-                        { render_islands(&state, on_island_click) }
+                        { render_bridges(state) }
+                        { render_islands(state, on_island_click) }
                     </svg>
 
                     { if is_complete {
@@ -762,135 +780,150 @@ fn victory_overlay() -> Html {
 }
 
 fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<u32>) -> Html {
-    state.grid.islands.iter().map(|i| {
-        let complete = state.bridges_for(i.id) == i.required;
-        let selected = state.selected == Some(i.id);
+    state
+        .grid
+        .islands
+        .iter()
+        .map(|i| {
+            let complete = state.bridges_for(i.id) == i.required;
+            let selected = state.selected == Some(i.id);
 
-        let fill = if complete { "#8BC34A" } else { "#FFFFFF" };
-        let stroke = if selected { "#2196F3" } else { "#000000" };
-        let stroke_width = if selected { 4 } else { 2 };
-        let radius = if selected { 32 } else { 28 };
+            let fill = if complete { "#8BC34A" } else { "#FFFFFF" };
+            let stroke = if selected { "#2196F3" } else { "#000000" };
+            let stroke_width = if selected { 4 } else { 2 };
+            let radius = if selected { 32 } else { 28 };
 
-        let onclick = {
-            let cb = cb.clone();
-            let id = i.id;
-            Callback::from(move |_| cb.emit(id))
-        };
+            let onclick = {
+                let cb = cb.clone();
+                let id = i.id;
+                Callback::from(move |_| cb.emit(id))
+            };
 
-        let filter = if selected { "url(#selectedGlow)" } else { "" };
-        let shudder_class = if state.shuddered_island == Some(i.id) { "shudder" } else { "" };
+            let filter = if selected { "url(#selectedGlow)" } else { "" };
+            let shudder_class = if state.shuddered_island == Some(i.id) {
+                "shudder"
+            } else {
+                ""
+            };
 
-        html! {
-            <g onclick={onclick} style="cursor:pointer;" class={shudder_class}>
-                <circle
-                    cx={(i.x * 100).to_string()}
-                    cy={(i.y * 100).to_string()}
-                    r={50}
-                    fill="transparent"
-                />
-                <circle
-                    cx={(i.x * 100).to_string()}
-                    cy={(i.y * 100).to_string()}
-                    r={radius.to_string()}
-                    fill={fill}
-                    stroke={stroke}
-                    stroke-width={stroke_width.to_string()}
-                    filter={filter}
-                />
-                <text
-                    x={(i.x * 100).to_string()}
-                    y={(i.y * 100 + 7).to_string()}
-                    text-anchor="middle"
-                    font-size="20"
-                    font-family="sans-serif"
-                    pointer-events="none"
-                >
-                    { i.required.to_string() }
-                </text>
-            </g>
-        }
-    }).collect()
+            html! {
+                <g onclick={onclick} style="cursor:pointer;" class={shudder_class}>
+                    <circle
+                        cx={(i.x * 100).to_string()}
+                        cy={(i.y * 100).to_string()}
+                        r={50}
+                        fill="transparent"
+                    />
+                    <circle
+                        cx={(i.x * 100).to_string()}
+                        cy={(i.y * 100).to_string()}
+                        r={radius.to_string()}
+                        fill={fill}
+                        stroke={stroke}
+                        stroke-width={stroke_width.to_string()}
+                        filter={filter}
+                    />
+                    <text
+                        x={(i.x * 100).to_string()}
+                        y={(i.y * 100 + 7).to_string()}
+                        text-anchor="middle"
+                        font-size="20"
+                        font-family="sans-serif"
+                        pointer-events="none"
+                    >
+                        { i.required.to_string() }
+                    </text>
+                </g>
+            }
+        })
+        .collect()
 }
 
 fn render_bridges(state: &UseStateHandle<GameState>) -> Html {
-    state.bridges.iter().flat_map(|((a, b), count)| {
-        let ia = state.island(*a);
-        let ib = state.island(*b);
+    state
+        .bridges
+        .iter()
+        .flat_map(|((a, b), count)| {
+            let ia = state.island(*a);
+            let ib = state.island(*b);
 
-        // Determine if horizontal or vertical
-        let horizontal = ia.y == ib.y;
-        let vertical   = ia.x == ib.x;
+            // Determine if horizontal or vertical
+            let horizontal = ia.y == ib.y;
+            let vertical = ia.x == ib.x;
 
-        // offsets for single vs double
-        let offsets: Vec<i32> = if *count == 1 {
-            vec![0] // single line, no offset
-        } else {
-            vec![-5, 5] // double line, 5px apart
-        };
-
-        offsets.into_iter().map(move |offset: i32| {
-            
-            let (x1, y1, x2, y2) = if horizontal {
-                // horizontal → offset dy
-                (
-                    ia.x * 100,
-                    (ia.y * 100) + offset,
-                    ib.x * 100,
-                    (ib.y * 100) + offset,
-                )
-            } else if vertical {
-                // vertical → offset dx
-                (
-                    (ia.x * 100) + offset,
-                    ia.y * 100,
-                    (ib.x * 100) + offset,
-                    ib.y * 100,
-                )
+            // offsets for single vs double
+            let offsets: Vec<i32> = if *count == 1 {
+                vec![0] // single line, no offset
             } else {
-                // fallback diagonal (shouldn't happen)
-                println!("Warning: diagonal bridge detected between islands {} and {}", a, b);
-                (ia.x * 100, ia.y * 100, ib.x * 100, ib.y * 100)
+                vec![-5, 5] // double line, 5px apart
             };
 
-            // clone state for click
-            let state = state.clone();
-            let key = (a.min(b).to_owned(), a.max(b).to_owned());
-            let onclick = Callback::from(move |_| {
-                let mut s = (*state).clone();
-                if let Some(c) = s.bridges.get_mut(&key) {
-                    if *c > 1 {
-                        *c -= 1; // double → single
-                    } else {
-                        s.bridges.remove(&key); // single → remove
-                    }
-                }
-                state.set(s);
-            });
+            offsets.into_iter().map(move |offset: i32| {
+                let (x1, y1, x2, y2) = if horizontal {
+                    // horizontal → offset dy
+                    (
+                        ia.x * 100,
+                        (ia.y * 100) + offset,
+                        ib.x * 100,
+                        (ib.y * 100) + offset,
+                    )
+                } else if vertical {
+                    // vertical → offset dx
+                    (
+                        (ia.x * 100) + offset,
+                        ia.y * 100,
+                        (ib.x * 100) + offset,
+                        ib.y * 100,
+                    )
+                } else {
+                    // fallback diagonal (shouldn't happen)
+                    println!(
+                        "Warning: diagonal bridge detected between islands {} and {}",
+                        a, b
+                    );
+                    (ia.x * 100, ia.y * 100, ib.x * 100, ib.y * 100)
+                };
 
-            html! {
-                <>
-                    <line
-                        x1={x1.to_string()}
-                        y1={y1.to_string()}
-                        x2={x2.to_string()}
-                        y2={y2.to_string()}
-                        stroke="black"
-                        stroke-width="4"
-                        stroke-linecap="round"
-                        style="cursor:pointer;"
-                    />
-                    <line
-                        x1={x1.to_string()}
-                        y1={y1.to_string()}
-                        x2={x2.to_string()}
-                        y2={y2.to_string()}
-                        stroke="transparent"
-                        stroke-width="35"
-                        style="cursor:pointer;"
-                        {onclick}
-                    />
-                </>
-            }
+                // clone state for click
+                let state = state.clone();
+                let key = (a.min(b).to_owned(), a.max(b).to_owned());
+                let onclick = Callback::from(move |_| {
+                    let mut s = (*state).clone();
+                    if let Some(c) = s.bridges.get_mut(&key) {
+                        if *c > 1 {
+                            *c -= 1; // double → single
+                        } else {
+                            s.bridges.remove(&key); // single → remove
+                        }
+                    }
+                    state.set(s);
+                });
+
+                html! {
+                    <>
+                        <line
+                            x1={x1.to_string()}
+                            y1={y1.to_string()}
+                            x2={x2.to_string()}
+                            y2={y2.to_string()}
+                            stroke="black"
+                            stroke-width="4"
+                            stroke-linecap="round"
+                            style="cursor:pointer;"
+                        />
+                        <line
+                            x1={x1.to_string()}
+                            y1={y1.to_string()}
+                            x2={x2.to_string()}
+                            y2={y2.to_string()}
+                            stroke="transparent"
+                            stroke-width="35"
+                            style="cursor:pointer;"
+                            {onclick}
+                        />
+                    </>
+                }
+            })
         })
-    }).collect()
+        .collect()
 }
