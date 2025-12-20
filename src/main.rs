@@ -945,27 +945,16 @@ fn render_bridges(state: &UseStateHandle<GameState>) -> Html {
 fn get_base_path() -> String {
     if let Some(window) = web_sys::window() {
         if let Some(document) = window.document() {
+            // Get the base href that was set dynamically in index.html
             if let Some(base) = document.query_selector("base").ok().flatten() {
                 if let Some(href) = base.get_attribute("href") {
                     return href;
                 }
             }
         }
-        
-        // Fallback: use the origin + pathname up to the app root
-        if let Ok(location) = window.location().pathname() {
-            // For GitHub Pages: /repo-name/ -> return /repo-name/
-            // For local: / -> return /
-            let segments: Vec<&str> = location.split('/').filter(|s| !s.is_empty()).collect();
-            
-            // If we're on a sub-route like /game/123, extract the base
-            // Check if first segment looks like a repo name (not 'game', 'rules', etc.)
-            if !segments.is_empty() && !matches!(segments[0], "game" | "rules" | "404") {
-                return format!("/{}/", segments[0]);
-            }
-        }
     }
     
+    // Fallback to root
     "/".to_string()
 }
 

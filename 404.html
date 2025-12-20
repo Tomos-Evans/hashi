@@ -4,11 +4,9 @@
     <meta charset="utf-8">
     <title>Hashi Puzzle</title>
     <script>
-      // Get the path after the repo name for GitHub Pages
-      var pathSegments = location.pathname.split('/').slice(0, 2).join('/');
-      var redirect = location.href.replace(location.pathname, pathSegments + location.pathname.substring(pathSegments.length));
-      sessionStorage.redirect = redirect;
+      // Store the path for restoration after redirect
+      sessionStorage.redirect = location.href;
     </script>
-    <meta http-equiv="refresh" content="0;URL='./'">
+    <meta http-equiv="refresh" content="0;URL='/'">
   </head>
 </html>

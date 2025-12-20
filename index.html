@@ -2,7 +2,26 @@
 
 <html lang="en">
     <head>
-        <base href="/">
+        <script>
+            // Set base href dynamically for GitHub Pages and local development
+            (function() {
+                var path = window.location.pathname;
+                var segments = path.split('/').filter(function(s) { return s.length > 0; });
+                
+                // If path looks like /repo-name/game/... or /repo-name/rules/...
+                // then base should be /repo-name/
+                // Otherwise (local or root deployment), base is /
+                var base = '/';
+                if (segments.length > 0 && segments[0] !== 'index.html') {
+                    var firstSegment = segments[0];
+                    // Check if first segment is a route (game, rules, 404) or a repo name
+                    if (firstSegment !== 'game' && firstSegment !== 'rules' && firstSegment !== '404') {
+                        base = '/' + firstSegment + '/';
+                    }
+                }
+                document.write('<base href="' + base + '">');
+            })();
+        </script>
     </head>
     <script>
         (function(){
