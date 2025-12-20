@@ -2,10 +2,30 @@ use std::collections::HashMap;
 use gloo::net::http::Request;
 use serde::Deserialize;
 use yew::prelude::*;
+use yew_router::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 fn main() {
     yew::Renderer::<App>::new().render();
+}
+
+/* =======================
+   Routes
+   ======================= */
+
+#[derive(Clone, Routable, PartialEq)]
+enum Route {
+    #[at("/")]
+    Home,
+    #[at("/game/random")]
+    RandomGame,
+    #[at("/game/:id")]
+    Game { id: String },
+    #[at("/rules")]
+    Rules,
+    #[not_found]
+    #[at("/404")]
+    NotFound,
 }
 
 /* =======================
@@ -34,7 +54,7 @@ struct Island {
 #[derive(Clone)]
 struct GameState {
     grid: Grid,
-    bridges: HashMap<(u32, u32), u8>, // (min_id, max_id) -> count (1 or 2)
+    bridges: HashMap<(u32, u32), u8>,
     selected: Option<u32>,
     shuddered_island: Option<u32>,
     puzzle_id: String,
@@ -44,7 +64,7 @@ impl Default for GameState {
     fn default() -> Self {
         GameState {
             grid: Grid { width: 0, height: 0, islands: vec![] },
-            bridges: std::collections::HashMap::new(),
+            bridges: HashMap::new(),
             selected: None,
             shuddered_island: None,
             puzzle_id: "Unknown".to_string(),
@@ -53,27 +73,10 @@ impl Default for GameState {
 }
 
 /* =======================
-   Load puzzle (JSON)
-   ======================= */
-
-// fn load_game() -> GameState {
-//     let json = r#"
-// "#;
-
-//     GameState {
-//         grid: serde_json::from_str(json).unwrap(),
-//         bridges: HashMap::new(),
-//         selected: None,
-//         shuddered_island: None,
-//     }
-// }
-
-/* =======================
    Rule helpers
    ======================= */
 
 impl GameState {
-
     fn island(&self, id: u32) -> &Island {
         self.grid.islands.iter().find(|i| i.id == id).unwrap()
     }
@@ -123,6 +126,53 @@ impl GameState {
 
         true
     }
+
+    fn is_complete(&self) -> bool {
+        if self.grid.islands.is_empty() {
+            return false;
+        }
+
+        // Check if all islands have the required number of bridges
+        for island in &self.grid.islands {
+            if self.bridges_for(island.id) != island.required {
+                return false;
+            }
+        }
+
+        // Check if all islands are connected (using DFS/BFS)
+        if !self.is_connected() {
+            return false;
+        }
+
+        true
+    }
+
+    fn is_connected(&self) -> bool {
+        if self.grid.islands.is_empty() {
+            return true;
+        }
+
+        let mut visited = std::collections::HashSet::new();
+        let mut stack = vec![self.grid.islands[0].id];
+
+        while let Some(current) = stack.pop() {
+            if visited.contains(&current) {
+                continue;
+            }
+            visited.insert(current);
+
+            // Find all connected islands
+            for ((a, b), _) in &self.bridges {
+                if *a == current && !visited.contains(b) {
+                    stack.push(*b);
+                } else if *b == current && !visited.contains(a) {
+                    stack.push(*a);
+                }
+            }
+        }
+
+        visited.len() == self.grid.islands.len()
+    }
 }
 
 fn blocked(a: &Island, b: &Island, islands: &[Island]) -> bool {
@@ -167,19 +217,343 @@ fn crosses(a1: &Island, b1: &Island, a2: &Island, b2: &Island) -> bool {
 }
 
 /* =======================
-   Yew App
+   Page Components
+   ======================= */
+
+#[function_component(Home)]
+fn home() -> Html {
+    let navigator = use_navigator().unwrap();
+
+    let on_new_game = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::RandomGame);
+        })
+    };
+
+    let on_rules = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::Rules);
+        })
+    };
+
+    html! {
+        <div style="max-width: 600px; margin: 50px auto; padding: 20px; font-family: sans-serif;">
+            <h1 style="text-align: center; color: #333;">{"Hashi Puzzle Game"}</h1>
+            <p style="text-align: center; color: #666; margin-bottom: 40px;">
+                {"Connect the islands with bridges following the puzzle rules"}
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 20px; align-items: center;">
+                <button
+                    onclick={on_new_game}
+                    style="
+                        padding: 15px 40px;
+                        font-size: 18px;
+                        background: #2196F3;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        min-width: 200px;
+                    "
+                >
+                    {"New Random Game"}
+                </button>
+                <button
+                    onclick={on_rules}
+                    style="
+                        padding: 15px 40px;
+                        font-size: 18px;
+                        background: #8BC34A;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        min-width: 200px;
+                    "
+                >
+                    {"View Rules"}
+                </button>
+            </div>
+        </div>
+    }
+}
+
+#[function_component(Rules)]
+fn rules() -> Html {
+    let navigator = use_navigator().unwrap();
+
+    let on_back = {
+        Callback::from(move |_| {
+            navigator.push(&Route::Home);
+        })
+    };
+
+    html! {
+        <div style="max-width: 800px; margin: 30px auto; padding: 20px; font-family: sans-serif;">
+            <h1>{"Hashi Rules"}</h1>
+            <div style="line-height: 1.8; color: #333;">
+                <h2>{"Objective"}</h2>
+                <p>{"Connect all islands with bridges according to the numbers on each island."}</p>
+
+                <h2>{"Rules"}</h2>
+                <ul>
+                    <li>{"The number on each island indicates how many bridges must connect to it"}</li>
+                    <li>{"Bridges can only be horizontal or vertical"}</li>
+                    <li>{"Bridges cannot cross each other"}</li>
+                    <li>{"Bridges cannot cross islands"}</li>
+                    <li>{"You can place 1 or 2 bridges between two islands"}</li>
+                    <li>{"All islands must be connected in a single network"}</li>
+                </ul>
+
+                <h2>{"How to Play"}</h2>
+                <ul>
+                    <li>{"Click on an island to select it (it will glow blue)"}</li>
+                    <li>{"Click on another island to build a bridge between them"}</li>
+                    <li>{"Click the same pair again to add a second bridge"}</li>
+                    <li>{"Click on a bridge to remove it (reduces double to single, or removes single)"}</li>
+                    <li>{"When an island has the correct number of bridges, it turns green"}</li>
+                </ul>
+            </div>
+
+            <button
+                onclick={on_back}
+                style="
+                    margin-top: 30px;
+                    padding: 10px 30px;
+                    font-size: 16px;
+                    background: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                "
+            >
+                {"Back to Home"}
+            </button>
+        </div>
+    }
+}
+
+#[derive(Properties, PartialEq)]
+struct GameProps {
+    pub puzzle_id: String,
+}
+
+#[function_component(Game)]
+fn game(props: &GameProps) -> Html {
+    let state: UseStateHandle<GameState> = use_state(GameState::default);
+    let navigator = use_navigator().unwrap();
+    let puzzle_id = props.puzzle_id.clone();
+
+    {
+        let state = state.clone();
+        let navigator = navigator.clone();
+        let puzzle_id = puzzle_id.clone();
+        use_effect_with(puzzle_id.clone(), move |_| {
+            spawn_local(async move {
+                match Request::get("/puzzles/data.json").send().await {
+                    Ok(resp) => {
+                        if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await {
+                            if grids.is_empty() {
+                                web_sys::console::error_1(&"No puzzles found in data.json".into());
+                                return;
+                            }
+
+                            if let Some(grid) = grids.get(&puzzle_id) {
+                                web_sys::console::log_1(&format!("Loaded puzzle {}", puzzle_id).into());
+                                state.set(GameState {
+                                    grid: grid.clone(),
+                                    bridges: HashMap::new(),
+                                    selected: None,
+                                    shuddered_island: None,
+                                    puzzle_id: puzzle_id.clone(),
+                                });
+                            } else {
+                                // Puzzle not found - pick a random one
+                                web_sys::console::error_1(&format!("Puzzle ID '{}' not found, redirecting to random puzzle", puzzle_id).into());
+                                
+                                // Show error to user
+                                if let Some(window) = web_sys::window() {
+                                    let _ = window.alert_with_message(&format!("Puzzle '{}' not found. Loading a random puzzle instead.", puzzle_id));
+                                }
+                                
+                                let rand_index = rand::random_range(0..grids.len());
+                                let (id, _) = grids.iter().nth(rand_index).unwrap();
+                                navigator.push(&Route::Game { id: id.clone() });
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        web_sys::console::error_1(&format!("{err:?}").into());
+                        if let Some(window) = web_sys::window() {
+                            let _ = window.alert_with_message("Failed to load puzzles. Please check your connection.");
+                        }
+                    }
+                }
+            });
+
+            || ()
+        });
+    }
+
+    let on_back = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::Home);
+        })
+    };
+
+    let on_new_puzzle = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::RandomGame);
+        })
+    };
+
+    html! {
+        <div>
+            <div style="padding: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+                <button
+                    onclick={on_back}
+                    style="
+                        padding: 8px 20px;
+                        font-size: 14px;
+                        background: #2196F3;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        cursor: pointer;
+                    "
+                >
+                    {"← Back to Home"}
+                </button>
+                <button
+                    onclick={on_new_puzzle}
+                    style="
+                        padding: 8px 20px;
+                        font-size: 14px;
+                        background: #8BC34A;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        cursor: pointer;
+                    "
+                >
+                    {"🎲 New Random Puzzle"}
+                </button>
+            </div>
+            { render_game(&state) }
+        </div>
+    }
+}
+
+#[function_component(RandomGameRedirect)]
+fn random_game_redirect() -> Html {
+    let navigator = use_navigator().unwrap();
+
+    {
+        let navigator = navigator.clone();
+        use_effect_with((), move |_| {
+            spawn_local(async move {
+                match Request::get("/puzzles/data.json").send().await {
+                    Ok(resp) => {
+                        if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await {
+                            if !grids.is_empty() {
+                                let rand_index = rand::random_range(0..grids.len());
+                                let (id, _) = grids.iter().nth(rand_index).unwrap();
+                                navigator.push(&Route::Game { id: id.clone() });
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        web_sys::console::error_1(&format!("{err:?}").into());
+                    }
+                }
+            });
+
+            || ()
+        });
+    }
+
+    html! {
+        <div style="text-align: center; padding: 50px;">
+            <p>{"Loading random puzzle..."}</p>
+        </div>
+    }
+}
+
+#[function_component(NotFound)]
+fn not_found() -> Html {
+    let navigator = use_navigator().unwrap();
+
+    let on_home = {
+        Callback::from(move |_| {
+            navigator.push(&Route::Home);
+        })
+    };
+
+    html! {
+        <div style="text-align: center; padding: 50px; font-family: sans-serif;">
+            <h1>{"404 - Page Not Found"}</h1>
+            <p>{"The page you're looking for doesn't exist."}</p>
+            <button
+                onclick={on_home}
+                style="
+                    margin-top: 20px;
+                    padding: 10px 30px;
+                    font-size: 16px;
+                    background: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                "
+            >
+                {"Go Home"}
+            </button>
+        </div>
+    }
+}
+
+/* =======================
+   Main App with Router
+   ======================= */
+
+fn switch(routes: Route) -> Html {
+    match routes {
+        Route::Home => html! { <Home /> },
+        Route::RandomGame => html! { <RandomGameRedirect /> },
+        Route::Game { id } => html! { <Game puzzle_id={id} /> },
+        Route::Rules => html! { <Rules /> },
+        Route::NotFound => html! { <NotFound /> },
+    }
+}
+
+#[function_component(App)]
+fn app() -> Html {
+    html! {
+        <BrowserRouter>
+            <Switch<Route> render={switch} />
+        </BrowserRouter>
+    }
+}
+
+/* =======================
+   Game Rendering
    ======================= */
 
 fn render_game(state: &UseStateHandle<GameState>) -> Html {
-        if state.grid.islands.is_empty() {
-        html! { <p>{"Loading puzzle..."}</p> }
+    if state.grid.islands.is_empty() {
+        html! { <p style="text-align: center; padding: 50px;">{"Loading puzzle..."}</p> }
     } else {
+        let is_complete = state.is_complete();
 
         let on_island_click = {
             let state = state.clone();
             Callback::from(move |id: u32| {
                 let mut s = (*state).clone();
-
 
                 match s.selected {
                     None => s.selected = Some(id),
@@ -189,21 +563,17 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                                 let key = (prev.min(id), prev.max(id));
                                 *s.bridges.entry(key).or_insert(0) += 1;
                                 s.selected = None;
-                                
                             } else {
                                 s.shuddered_island = Some(id);
                                 s.selected = None;
-                                // TODO : clear shudder after animation. This breaks the state or sets it back to what it was
                             }
                         }
                     }
                 }
                 
                 state.set(s);
-
             })
         };
-
 
         let height = state.grid.width * 100;
         let width = state.grid.height * 100;
@@ -223,14 +593,33 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
 
                         .shudder {
                             animation: shudder 0.3s ease;
-                        }   
+                        }
+
+                        @keyframes fadeIn {
+                            from { opacity: 0; transform: scale(0.8); }
+                            to { opacity: 1; transform: scale(1); }
+                        }
+
+                        .victory-overlay {
+                            animation: fadeIn 0.5s ease-out;
+                        }
+
+                        @keyframes bounce {
+                            0%, 100% { transform: translateY(0); }
+                            50% { transform: translateY(-10px); }
+                        }
+
+                        .victory-emoji {
+                            animation: bounce 1s ease-in-out infinite;
+                        }
                     "#}  
                 </style>
-                <h1>{format!("Puzzle ID: {}", state.puzzle_id)}</h1>
+                <h1 style="text-align: center;">
+                    {format!("Puzzle ID: {}", state.puzzle_id)}
+                </h1>
 
-                <div style="width:100vw; overflow:auto;">
+                <div style="width:100vw; overflow:auto; position: relative;">
                     <svg
-                    
                         viewBox={format!("-100 -100 {} {}", width + 100, height+100)}
                         preserveAspectRatio="xMidYMid meet"
                         style="
@@ -243,8 +632,8 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                             user-select: none;
                             -webkit-user-select: none;
                             -webkit-tap-highlight-color: transparent;
-                            "
-                        >
+                        "
+                    >
                         <defs>
                             <filter id="selectedGlow">
                                 <feDropShadow
@@ -259,123 +648,126 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                         { render_bridges(&state) }
                         { render_islands(&state, on_island_click) }
                     </svg>
+
+                    { if is_complete {
+                        html! { <VictoryOverlay /> }
+                    } else {
+                        html! {}
+                    }}
                 </div>
             </>
-            
         }
     }
 }
 
+#[function_component(VictoryOverlay)]
+fn victory_overlay() -> Html {
+    let navigator = use_navigator().unwrap();
 
-fn puzzle_id_from_url() -> Option<String> {
-    let window = web_sys::window()?;
-    let location = window.location();
-    let path = location.pathname().ok()?;
+    let on_new_puzzle = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::RandomGame);
+        })
+    };
 
-    // "/abc123" → "abc123"
-    let trimmed = path.trim_start_matches('/');
-
-    if trimmed.is_empty() || trimmed.to_lowercase() == "random" {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-#[function_component(App)]
-fn app() -> Html {
-    let state: UseStateHandle<GameState> = use_state(GameState::default);
-
-    {
-        let state = state.clone();
-        use_effect_with((), move |_| {
-            spawn_local(async move {
-                let puzzle_id = puzzle_id_from_url();
-
-                match Request::get("puzzles/data.json").send().await {
-                    Ok(resp) => {
-                        web_sys::console::log_1(&"Puzzle loaded".into());
-                        if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await {
-
-                            if grids.is_empty() {
-                                web_sys::console::error_1(&"No puzzles found in data.json".into());
-                                return;
-                            }
-
-
-                            let (puzzle_id, grid) = match puzzle_id {
-                                Some(id) => {
-                                    if let Some(g) = grids.get(&id) {
-                                        web_sys::console::log_1(&format!("Loaded puzzle {}", id).into());
-                                        (id.clone(), g.clone())
-                                    } else {
-                                        web_sys::console::error_1(&format!("Puzzle ID {} not found, loading random puzzle", id).into());
-                                        let rand_index = rand::random_range(0..grids.len());
-                                        let (id, grid) = grids.iter().nth(rand_index).unwrap();
-                                        (id.clone(), grid.clone())
-                                    }
-                                }
-                                None => {
-                                    // random puzzle
-                                    let rand_index = rand::random_range(0..grids.len());
-                                    let (id, grid) = grids.iter().nth(rand_index).unwrap();
-                                    (id.clone(), grid.clone())
-                                }
-                            };
-
-
-
-                            web_sys::console::log_1(&format!("Loaded puzzle {} with {} islands", puzzle_id, grid.islands.len()).into());
-
-                            state.set(GameState {
-                                grid: grid.clone(),
-                                bridges: HashMap::new(),
-                                selected: None,
-                                shuddered_island: None,
-                                puzzle_id,
-                            });
-                        }
-                    }
-                    Err(err) => {
-                        web_sys::console::error_1(&format!("{err:?}").into());
-                    }
-                }
-            });
-
-            || ()
-        });    
-    }
-
+    let on_home = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::Home);
+        })
+    };
 
     html! {
-        <div>
-            { render_game(&state) }
+        <div
+            class="victory-overlay"
+            style="
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.4);
+                backdrop-filter: blur(3px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            "
+        >
+            <div style="
+                background: white;
+                padding: 40px;
+                border-radius: 20px;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+                text-align: center;
+                max-width: 400px;
+                margin: 20px;
+            ">
+                <div class="victory-emoji" style="font-size: 80px; margin-bottom: 20px;">
+                    {"🎉"}
+                </div>
+                <h2 style="
+                    color: #8BC34A;
+                    font-size: 32px;
+                    margin: 0 0 10px 0;
+                    font-family: sans-serif;
+                ">
+                    {"Puzzle Complete!"}
+                </h2>
+                <p style="
+                    color: #666;
+                    font-size: 16px;
+                    margin: 0 0 30px 0;
+                    font-family: sans-serif;
+                ">
+                    {"Congratulations! All islands are connected."}
+                </p>
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <button
+                        onclick={on_new_puzzle}
+                        style="
+                            padding: 15px 30px;
+                            font-size: 18px;
+                            background: #8BC34A;
+                            color: white;
+                            border: none;
+                            border-radius: 10px;
+                            cursor: pointer;
+                            font-weight: bold;
+                            transition: background 0.2s;
+                        "
+                    >
+                        {"🎲 Next Puzzle"}
+                    </button>
+                    <button
+                        onclick={on_home}
+                        style="
+                            padding: 12px 30px;
+                            font-size: 16px;
+                            background: #2196F3;
+                            color: white;
+                            border: none;
+                            border-radius: 10px;
+                            cursor: pointer;
+                            transition: background 0.2s;
+                        "
+                    >
+                        {"🏠 Home"}
+                    </button>
+                </div>
+            </div>
         </div>
     }
 }
-
-/* =======================
-   Rendering
-   ======================= */
 
 fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<u32>) -> Html {
     state.grid.islands.iter().map(|i| {
         let complete = state.bridges_for(i.id) == i.required;
         let selected = state.selected == Some(i.id);
 
-        let fill = if complete {
-            "#8BC34A"        // green
-        } else {
-            "#FFFFFF"
-        };
-
-        let stroke = if selected {
-            "#2196F3"        // blue
-            // "#000000"
-        } else {
-            "#000000"
-        };
-
+        let fill = if complete { "#8BC34A" } else { "#FFFFFF" };
+        let stroke = if selected { "#2196F3" } else { "#000000" };
         let stroke_width = if selected { 4 } else { 2 };
         let radius = if selected { 32 } else { 28 };
 
@@ -386,17 +778,10 @@ fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<u32>) -> Html 
         };
 
         let filter = if selected { "url(#selectedGlow)" } else { "" };
-
-        let shudder_class = if state.shuddered_island == Some(i.id) {
-            "shudder"
-        } else {
-            ""
-        };
-
+        let shudder_class = if state.shuddered_island == Some(i.id) { "shudder" } else { "" };
 
         html! {
             <g onclick={onclick} style="cursor:pointer;" class={shudder_class}>
-                // Invisible larger circle for easier clicking
                 <circle
                     cx={(i.x * 100).to_string()}
                     cy={(i.y * 100).to_string()}
@@ -426,7 +811,6 @@ fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<u32>) -> Html 
         }
     }).collect()
 }
-
 
 fn render_bridges(state: &UseStateHandle<GameState>) -> Html {
     state.bridges.iter().flat_map(|((a, b), count)| {
