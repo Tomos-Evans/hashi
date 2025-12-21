@@ -360,7 +360,7 @@ fn game(props: &GameProps) -> Html {
             spawn_local(async move {
                 let data_url = get_data_json_url();
                 web_sys::console::log_1(&format!("Fetching from: {}", data_url).into());
-                
+
                 match Request::get(&data_url).send().await {
                     Ok(resp) => {
                         if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await {
@@ -484,7 +484,7 @@ fn random_game_redirect() -> Html {
             spawn_local(async move {
                 let data_url = get_data_json_url();
                 web_sys::console::log_1(&format!("Fetching from: {}", data_url).into());
-                
+
                 match Request::get(&data_url).send().await {
                     Ok(resp) => {
                         if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await
@@ -939,8 +939,8 @@ fn render_bridges(state: &UseStateHandle<GameState>) -> Html {
 }
 
 /* =======================
-   Helper Functions
-   ======================= */
+Helper Functions
+======================= */
 
 fn get_base_path() -> String {
     if let Some(window) = web_sys::window() {
@@ -953,7 +953,7 @@ fn get_base_path() -> String {
             }
         }
     }
-    
+
     // Fallback to root
     "/".to_string()
 }
