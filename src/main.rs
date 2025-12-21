@@ -943,12 +943,13 @@ Helper Functions
 ======================= */
 
 fn get_base_path() -> String {
-    if let Some(window) = web_sys::window() && let Some(document) = window.document() && let Some(base) = document.query_selector("base").ok().flatten()  && let Some(href) = base.get_attribute("href") {
-                    return href;
-                }
-            
-        
-    
+    if let Some(window) = web_sys::window()
+        && let Some(document) = window.document()
+        && let Some(base) = document.query_selector("base").ok().flatten()
+        && let Some(href) = base.get_attribute("href")
+    {
+        return href;
+    }
 
     // Fallback to root
     "/".to_string()
