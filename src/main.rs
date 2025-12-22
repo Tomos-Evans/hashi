@@ -358,7 +358,7 @@ fn game(props: &GameProps) -> Html {
 
         use_effect_with(puzzle_id, move |_| {
             {
-                let hashi_grid = hashi::HashiGrid::generate(10, 10).unwrap();
+                let hashi_grid = hashi::HashiGrid::generate_with_seed(10, 10, puzzle_id).unwrap();
 
                 let mut islands = Vec::new();
                 for (island_id, (pos, hashi_island)) in hashi_grid.islands.iter().enumerate() {

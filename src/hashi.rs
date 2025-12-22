@@ -1,6 +1,6 @@
 use rand::SeedableRng;
 use rand::prelude::*;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -25,12 +25,9 @@ pub enum HashiError {
         line: BridgeLine,
         position: Position,
     },
-
-    #[error("Unknown error")]
-    Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct Position {
     pub x: u8,
     pub y: u8,
@@ -43,13 +40,13 @@ enum BridgeType {
     Double,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 enum BridgeDirection {
     Down,
     Right,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct BridgeLine {
     start: Position,
     end: Position,
@@ -173,12 +170,12 @@ enum Direction {
     Right,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HashiGrid {
     pub width: u8,
     pub height: u8,
-    pub islands: HashMap<Position, Island>,
-    bridges: HashMap<BridgeLine, BridgeType>,
+    pub islands: BTreeMap<Position, Island>,
+    bridges: BTreeMap<BridgeLine, BridgeType>,
 }
 
 impl HashiGrid {
@@ -189,11 +186,12 @@ impl HashiGrid {
         Ok(Self {
             width,
             height,
-            islands: HashMap::new(),
-            bridges: HashMap::new(),
+            islands: BTreeMap::new(),
+            bridges: BTreeMap::new(),
         })
     }
-
+    
+    #[allow(dead_code)]
     pub fn generate(width: u8, height: u8) -> Result<Self, HashiError> {
         // make random number generator. Make a StdRng from the default random source
         let mut rng = rand::rng();
@@ -202,7 +200,6 @@ impl HashiGrid {
         Self::_generate(width, height, rng)
     }
 
-    #[allow(dead_code)]
     pub fn generate_with_seed(width: u8, height: u8, seed: u64) -> Result<Self, HashiError> {
         // seed the random number generator
         let rng = rand::rngs::StdRng::seed_from_u64(seed);
@@ -224,7 +221,6 @@ impl HashiGrid {
         let position = Position { x, y };
         grid.add_island(position)?;
 
-        println!("{grid}");
 
         let mut max_remaining_iterations = num_islands as usize * 100;
 
@@ -232,12 +228,10 @@ impl HashiGrid {
         while grid.islands.len() < num_islands as usize && max_remaining_iterations > 0 {
             max_remaining_iterations -= 1;
 
-            // pick a random existing island
-            let existing_island_pos = *grid
-                .islands
-                .keys()
-                .choose(&mut rng)
-                .ok_or(HashiError::Unknown)?;
+            // pick a random existing island - use index-based selection for determinism
+            let island_keys: Vec<Position> = grid.islands.keys().copied().collect();
+            let index = rng.random_range(0..island_keys.len());
+            let existing_island_pos = island_keys[index];
 
             // pick a random direction
             let direction = match rng.random_range(0..4) {
@@ -250,7 +244,6 @@ impl HashiGrid {
 
             let proposed_position = match direction {
                 Direction::Up => {
-                    println!("Trying Up from {existing_island_pos:?}");
                     if existing_island_pos.y == 0 {
                         None
                     } else {
@@ -261,7 +254,6 @@ impl HashiGrid {
                     }
                 }
                 Direction::Down => {
-                    println!("Trying Down from {existing_island_pos:?}");
                     if existing_island_pos.y >= height - 1 {
                         None
                     } else {
@@ -272,7 +264,6 @@ impl HashiGrid {
                     }
                 }
                 Direction::Left => {
-                    println!("Trying Left from {existing_island_pos:?}");
                     if existing_island_pos.x == 0 {
                         None
                     } else {
@@ -283,7 +274,6 @@ impl HashiGrid {
                     }
                 }
                 Direction::Right => {
-                    println!("Trying Right from {existing_island_pos:?}");
                     if existing_island_pos.x >= width - 1 {
                         None
                     } else {
@@ -304,22 +294,12 @@ impl HashiGrid {
             match grid.add_island(proposed_position) {
                 Ok(()) => {
                     // successfully added island
-                    println!(
-                        "Added island at {proposed_position:?} going Up from {existing_island_pos:?}"
-                    );
                     // can we add a bridge?
                     let bridge_line = BridgeLine::new(existing_island_pos, proposed_position)?;
                     match grid.add_bridge(bridge_line) {
                         Ok(_) => {
-                            println!(
-                                "Added bridge from {existing_island_pos:?} to {proposed_position:?}"
-                            );
-                            println!("{grid}");
                         }
-                        Err(e) => {
-                            println!(
-                                "Failed to add bridge from {existing_island_pos:?} to {proposed_position:?}: {e:?}"
-                            );
+                        Err(_) => {
                             // remove the island we just added
                             grid.islands.remove(&proposed_position);
                         }
@@ -401,7 +381,6 @@ impl HashiGrid {
                     }
                     match grid.add_bridge(bridge_line) {
                         Ok(_) => {
-                            println!("Added loop bridge from {island_pos:?} to {target_pos:?}");
                         }
                         Err(_) => {
                             // failed to add bridge, ignore
@@ -416,10 +395,6 @@ impl HashiGrid {
         bridge_lines.shuffle(&mut rng);
         for bridge_line in bridge_lines.iter().take((bridge_lines.len() / 4).max(1)) {
             if let Ok(BridgeType::Double) = grid.add_bridge(*bridge_line) {
-                println!(
-                    "Doubled bridge from {:?} to {:?}",
-                    bridge_line.start, bridge_line.end
-                );
             }
         }
 
@@ -439,12 +414,6 @@ impl HashiGrid {
                 island.required_bridges = bridge_count;
             }
         }
-
-        if max_remaining_iterations == 0 {
-            println!("Warning: reached maximum iterations while generating grid");
-        }
-
-        println!("{grid}");
 
         Ok(grid)
     }
@@ -689,7 +658,6 @@ mod tests {
         grid.add_island(Position { x: 1, y: 3 }).unwrap();
         grid.add_island(Position { x: 4, y: 3 }).unwrap();
 
-        println!("{grid}");
         let vertical = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 2, y: 5 }).unwrap();
         assert!(grid.add_bridge(vertical).unwrap() == BridgeType::Single);
 
@@ -746,6 +714,17 @@ mod tests {
         assert!(grid.add_bridge(left).unwrap() == BridgeType::Double);
         assert!(grid.add_bridge(right).unwrap() == BridgeType::Double);
 
-        println!("{grid}");
+    }
+
+
+    #[test]
+    fn test_same_seed_produces_same_grid() {
+        let seed = 12345;
+        let grid1 = HashiGrid::generate_with_seed(10, 10, seed).unwrap();
+        let grid2 = HashiGrid::generate_with_seed(10, 10, seed).unwrap();
+        let grid3 = HashiGrid::generate_with_seed(10, 10, seed+1).unwrap();
+
+        assert_eq!(grid1, grid2);
+        assert_ne!(grid1, grid3);
     }
 }
