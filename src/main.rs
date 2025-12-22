@@ -1,9 +1,11 @@
-use gloo::net::http::Request;
+// use gloo::net::http::Request;
 use serde::Deserialize;
-use std::collections::HashMap;
-use wasm_bindgen_futures::spawn_local;
+use std::{collections::HashMap, str};
+// use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
+
+mod hashi;
 
 fn main() {
     yew::Renderer::<App>::new().render();
@@ -17,10 +19,8 @@ Routes
 enum Route {
     #[at("/")]
     Home,
-    #[at("/game/random")]
-    RandomGame,
-    #[at("/game/:id")]
-    Game { id: String },
+    #[at("/game/:width/:height/:id")]
+    Game { width: u8, height: u8, id: u64 },
     #[at("/rules")]
     Rules,
     #[not_found]
@@ -57,7 +57,6 @@ struct GameState {
     bridges: HashMap<(u32, u32), u8>,
     selected: Option<u32>,
     shuddered_island: Option<u32>,
-    puzzle_id: String,
 }
 
 impl Default for GameState {
@@ -71,7 +70,6 @@ impl Default for GameState {
             bridges: HashMap::new(),
             selected: None,
             shuddered_island: None,
-            puzzle_id: "Unknown".to_string(),
         }
     }
 }
@@ -229,13 +227,26 @@ Page Components
 fn home() -> Html {
     let navigator = use_navigator().unwrap();
 
-    let on_new_game = {
+    let on_new_game_5x10 = {
         let navigator = navigator.clone();
         Callback::from(move |_| {
-            navigator.push(&Route::RandomGame);
+            navigator.push(&Route::Game {
+                width: 5,
+                height: 10,
+                id: rand::random::<u64>(),
+            });
         })
     };
-
+    let on_new_game_8x16 = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::Game {
+                width: 8,
+                height: 16,
+                id: rand::random::<u64>(),
+            });
+        })
+    };
     let on_rules = {
         let navigator = navigator.clone();
         Callback::from(move |_| {
@@ -251,7 +262,7 @@ fn home() -> Html {
             </p>
             <div style="display: flex; flex-direction: column; gap: 20px; align-items: center;">
                 <button
-                    onclick={on_new_game}
+                    onclick={on_new_game_5x10}
                     style="
                         padding: 15px 40px;
                         font-size: 18px;
@@ -263,7 +274,22 @@ fn home() -> Html {
                         min-width: 200px;
                     "
                 >
-                    {"New Random Game"}
+                    {"5x10"}
+                </button>
+                <button
+                    onclick={on_new_game_8x16}
+                    style="
+                        padding: 15px 40px;
+                        font-size: 18px;
+                        background: #2196F3;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        min-width: 200px;
+                    "
+                >
+                    {"8x16"}
                 </button>
                 <button
                     onclick={on_rules}
@@ -343,76 +369,50 @@ fn rules() -> Html {
 
 #[derive(Properties, PartialEq)]
 struct GameProps {
-    pub puzzle_id: String,
+    pub puzzle_id: u64,
+    pub width: u8,
+    pub height: u8,
 }
 
 #[function_component(Game)]
 fn game(props: &GameProps) -> Html {
     let state: UseStateHandle<GameState> = use_state(GameState::default);
     let navigator = use_navigator().unwrap();
-    let puzzle_id = props.puzzle_id.clone();
-
+    let puzzle_id = props.puzzle_id;
+    let width = props.width;
+    let height = props.height;
     {
         let state = state.clone();
-        let navigator = navigator.clone();
-        let puzzle_id = puzzle_id.clone();
-        use_effect_with(puzzle_id.clone(), move |_| {
-            spawn_local(async move {
-                let data_url = get_data_json_url();
-                web_sys::console::log_1(&format!("Fetching from: {}", data_url).into());
 
-                match Request::get(&data_url).send().await {
-                    Ok(resp) => {
-                        if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await {
-                            if grids.is_empty() {
-                                web_sys::console::error_1(&"No puzzles found in data.json".into());
-                                return;
-                            }
+        use_effect_with(puzzle_id, move |_| {
+            {
+                let hashi_grid =
+                    hashi::HashiGrid::generate_with_seed(width, height, puzzle_id).unwrap();
 
-                            if let Some(grid) = grids.get(&puzzle_id) {
-                                web_sys::console::log_1(
-                                    &format!("Loaded puzzle {}", puzzle_id).into(),
-                                );
-                                state.set(GameState {
-                                    grid: grid.clone(),
-                                    bridges: HashMap::new(),
-                                    selected: None,
-                                    shuddered_island: None,
-                                    puzzle_id: puzzle_id.clone(),
-                                });
-                            } else {
-                                web_sys::console::error_1(
-                                    &format!(
-                                        "Puzzle ID '{}' not found, redirecting to random puzzle",
-                                        puzzle_id
-                                    )
-                                    .into(),
-                                );
-
-                                if let Some(window) = web_sys::window() {
-                                    let _ = window.alert_with_message(&format!(
-                                        "Puzzle '{}' not found. Loading a random puzzle instead.",
-                                        puzzle_id
-                                    ));
-                                }
-
-                                let rand_index = rand::random_range(0..grids.len());
-                                let (id, _) = grids.iter().nth(rand_index).unwrap();
-                                navigator.push(&Route::Game { id: id.clone() });
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        web_sys::console::error_1(&format!("{err:?}").into());
-                        if let Some(window) = web_sys::window() {
-                            let _ = window.alert_with_message(
-                                "Failed to load puzzles. Please check your connection.",
-                            );
-                        }
-                    }
+                let mut islands = Vec::new();
+                for (island_id, (pos, hashi_island)) in hashi_grid.islands.iter().enumerate() {
+                    islands.push(Island {
+                        id: island_id as u32,
+                        x: pos.x as i32,
+                        y: pos.y as i32,
+                        required: hashi_island.required_bridges,
+                    });
                 }
-            });
 
+                // generate a puzzle
+                let game_grid = Grid {
+                    width: hashi_grid.width as u32,
+                    height: hashi_grid.height as u32,
+                    islands,
+                };
+
+                state.set(GameState {
+                    grid: game_grid,
+                    bridges: HashMap::new(),
+                    selected: None,
+                    shuddered_island: None,
+                });
+            }
             || ()
         });
     }
@@ -427,7 +427,11 @@ fn game(props: &GameProps) -> Html {
     let on_new_puzzle = {
         let navigator = navigator.clone();
         Callback::from(move |_| {
-            navigator.push(&Route::RandomGame);
+            navigator.push(&Route::Game {
+                width,
+                height,
+                id: rand::random::<u64>(),
+            });
         })
     };
 
@@ -476,39 +480,8 @@ fn game(props: &GameProps) -> Html {
 
 #[function_component(RandomGameRedirect)]
 fn random_game_redirect() -> Html {
-    let navigator = use_navigator().unwrap();
-
-    {
-        let navigator = navigator.clone();
-        use_effect_with((), move |_| {
-            spawn_local(async move {
-                let data_url = get_data_json_url();
-                web_sys::console::log_1(&format!("Fetching from: {}", data_url).into());
-
-                match Request::get(&data_url).send().await {
-                    Ok(resp) => {
-                        if let Ok(grids) = resp.json::<HashMap<String, Grid>>().await
-                            && !grids.is_empty()
-                        {
-                            let rand_index = rand::random_range(0..grids.len());
-                            let (id, _) = grids.iter().nth(rand_index).unwrap();
-                            navigator.push(&Route::Game { id: id.clone() });
-                        }
-                    }
-                    Err(err) => {
-                        web_sys::console::error_1(&format!("{err:?}").into());
-                    }
-                }
-            });
-
-            || ()
-        });
-    }
-
     html! {
-        <div style="text-align: center; padding: 50px;">
-            <p>{"Loading random puzzle..."}</p>
-        </div>
+        <Redirect<Route> to={Route::Game { id: rand::random::<u64>(), width: 5, height: 10 }} />
     }
 }
 
@@ -552,8 +525,9 @@ Main App with Router
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => html! { <Home /> },
-        Route::RandomGame => html! { <RandomGameRedirect /> },
-        Route::Game { id } => html! { <Game puzzle_id={id} /> },
+        Route::Game { width, height, id } => {
+            html! { <Game width={width} height={height} puzzle_id={id} /> }
+        }
         Route::Rules => html! { <Rules /> },
         Route::NotFound => html! { <NotFound /> },
     }
@@ -603,8 +577,8 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
             })
         };
 
-        let height = state.grid.width * 100;
-        let width = state.grid.height * 100;
+        let width = state.grid.width * 100;
+        let height = state.grid.height * 100;
 
         html! {
             <>
@@ -642,13 +616,9 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                         }
                     "#}  
                 </style>
-                <h1 style="text-align: center;">
-                    {format!("Puzzle ID: {}", state.puzzle_id)}
-                </h1>
-
                 <div style="width:100vw; overflow:auto; position: relative;">
                     <svg
-                        viewBox={format!("-100 -100 {} {}", width + 100, height+100)}
+                        viewBox={format!("-100 -100 {} {}", width + 100, height + 100)}
                         preserveAspectRatio="xMidYMid meet"
                         style="
                             width: 100%;
@@ -678,7 +648,7 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                     </svg>
 
                     { if is_complete {
-                        html! { <VictoryOverlay /> }
+                        html! { <VictoryOverlay next_width={state.grid.width as u8} next_height={state.grid.height as u8} /> }
                     } else {
                         html! {}
                     }}
@@ -688,14 +658,26 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
     }
 }
 
+#[derive(Properties, PartialEq)]
+struct VictoryOverlayProps {
+    next_width: u8,
+    next_height: u8,
+}
+
 #[function_component(VictoryOverlay)]
-fn victory_overlay() -> Html {
+fn victory_overlay(props: &VictoryOverlayProps) -> Html {
     let navigator = use_navigator().unwrap();
+    let nw = props.next_width;
+    let nh = props.next_height;
 
     let on_new_puzzle = {
         let navigator = navigator.clone();
         Callback::from(move |_| {
-            navigator.push(&Route::RandomGame);
+            navigator.push(&Route::Game {
+                width: nw,
+                height: nh,
+                id: rand::random::<u64>(),
+            });
         })
     };
 
@@ -942,19 +924,19 @@ fn render_bridges(state: &UseStateHandle<GameState>) -> Html {
 Helper Functions
 ======================= */
 
-fn get_base_path() -> String {
-    if let Some(window) = web_sys::window()
-        && let Some(document) = window.document()
-        && let Some(base) = document.query_selector("base").ok().flatten()
-        && let Some(href) = base.get_attribute("href")
-    {
-        return href;
-    }
+// fn get_base_path() -> String {
+//     if let Some(window) = web_sys::window()
+//         && let Some(document) = window.document()
+//         && let Some(base) = document.query_selector("base").ok().flatten()
+//         && let Some(href) = base.get_attribute("href")
+//     {
+//         return href;
+//     }
 
-    // Fallback to root
-    "/".to_string()
-}
+//     // Fallback to root
+//     "/".to_string()
+// }
 
-fn get_data_json_url() -> String {
-    format!("{}puzzles/data.json", get_base_path())
-}
+// fn get_data_json_url() -> String {
+//     format!("{}puzzles/data.json", get_base_path())
+// }

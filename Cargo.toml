@@ -14,3 +14,4 @@ web-sys = "0.3.83"
 yew = { version = "0.22.0", features = ["csr"] }
 getrandom = { version = "0.3", features = ["wasm_js"] }
 yew-router = "0.19.0"
+thiserror = "2.0.17"
