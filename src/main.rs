@@ -59,7 +59,6 @@ struct GameState {
     bridges: HashMap<(u32, u32), u8>,
     selected: Option<u32>,
     shuddered_island: Option<u32>,
-    puzzle_id: u64,
 }
 
 impl Default for GameState {
@@ -73,7 +72,6 @@ impl Default for GameState {
             bridges: HashMap::new(),
             selected: None,
             shuddered_island: None,
-            puzzle_id: 0,
         }
     }
 }
@@ -358,7 +356,7 @@ fn game(props: &GameProps) -> Html {
 
         use_effect_with(puzzle_id, move |_| {
             {
-                let hashi_grid = hashi::HashiGrid::generate_with_seed(10, 10, puzzle_id).unwrap();
+                let hashi_grid = hashi::HashiGrid::generate_with_seed(5, 10, puzzle_id).unwrap();
 
                 let mut islands = Vec::new();
                 for (island_id, (pos, hashi_island)) in hashi_grid.islands.iter().enumerate() {
@@ -382,7 +380,6 @@ fn game(props: &GameProps) -> Html {
                     bridges: HashMap::new(),
                     selected: None,
                     shuddered_island: None,
-                    puzzle_id,
                 });
             }
             || ()
@@ -544,8 +541,8 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
             })
         };
 
-        let height = state.grid.width * 100;
-        let width = state.grid.height * 100;
+        let width = state.grid.width * 100;
+        let height = state.grid.height * 100;
 
         html! {
             <>
@@ -585,7 +582,7 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                 </style>
                 <div style="width:100vw; overflow:auto; position: relative;">
                     <svg
-                        viewBox={format!("-100 -100 {} {}", width + 100, height+100)}
+                        viewBox={format!("-100 -100 {} {}", width + 100, height + 100)}
                         preserveAspectRatio="xMidYMid meet"
                         style="
                             width: 100%;
