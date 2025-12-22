@@ -190,7 +190,7 @@ impl HashiGrid {
             bridges: BTreeMap::new(),
         })
     }
-    
+
     #[allow(dead_code)]
     pub fn generate(width: u8, height: u8) -> Result<Self, HashiError> {
         // make random number generator. Make a StdRng from the default random source
@@ -220,7 +220,6 @@ impl HashiGrid {
         let y = rng.random_range(0..height);
         let position = Position { x, y };
         grid.add_island(position)?;
-
 
         let mut max_remaining_iterations = num_islands as usize * 100;
 
@@ -297,8 +296,7 @@ impl HashiGrid {
                     // can we add a bridge?
                     let bridge_line = BridgeLine::new(existing_island_pos, proposed_position)?;
                     match grid.add_bridge(bridge_line) {
-                        Ok(_) => {
-                        }
+                        Ok(_) => {}
                         Err(_) => {
                             // remove the island we just added
                             grid.islands.remove(&proposed_position);
@@ -380,8 +378,7 @@ impl HashiGrid {
                         continue;
                     }
                     match grid.add_bridge(bridge_line) {
-                        Ok(_) => {
-                        }
+                        Ok(_) => {}
                         Err(_) => {
                             // failed to add bridge, ignore
                         }
@@ -394,8 +391,7 @@ impl HashiGrid {
         let mut bridge_lines: Vec<BridgeLine> = grid.bridges.keys().cloned().collect();
         bridge_lines.shuffle(&mut rng);
         for bridge_line in bridge_lines.iter().take((bridge_lines.len() / 4).max(1)) {
-            if let Ok(BridgeType::Double) = grid.add_bridge(*bridge_line) {
-            }
+            if let Ok(BridgeType::Double) = grid.add_bridge(*bridge_line) {}
         }
 
         // count bridges per island
@@ -713,16 +709,14 @@ mod tests {
         assert!(grid.add_bridge(down).unwrap() == BridgeType::Double);
         assert!(grid.add_bridge(left).unwrap() == BridgeType::Double);
         assert!(grid.add_bridge(right).unwrap() == BridgeType::Double);
-
     }
-
 
     #[test]
     fn test_same_seed_produces_same_grid() {
         let seed = 12345;
         let grid1 = HashiGrid::generate_with_seed(10, 10, seed).unwrap();
         let grid2 = HashiGrid::generate_with_seed(10, 10, seed).unwrap();
-        let grid3 = HashiGrid::generate_with_seed(10, 10, seed+1).unwrap();
+        let grid3 = HashiGrid::generate_with_seed(10, 10, seed + 1).unwrap();
 
         assert_eq!(grid1, grid2);
         assert_ne!(grid1, grid3);

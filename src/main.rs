@@ -583,10 +583,6 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                         }
                     "#}  
                 </style>
-                <h1 style="text-align: center;">
-                    {format!("Puzzle ID: {}", state.puzzle_id)}
-                </h1>
-
                 <div style="width:100vw; overflow:auto; position: relative;">
                     <svg
                         viewBox={format!("-100 -100 {} {}", width + 100, height+100)}
