@@ -1,6 +1,6 @@
 // use gloo::net::http::Request;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, str};
 // use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
@@ -19,10 +19,8 @@ Routes
 enum Route {
     #[at("/")]
     Home,
-    #[at("/game")]
-    RandomGame,
-    #[at("/game/:id")]
-    Game { id: u64 },
+    #[at("/game/:width/:height/:id")]
+    Game { width: u8, height: u8, id: u64 },
     #[at("/rules")]
     Rules,
     #[not_found]
@@ -229,13 +227,26 @@ Page Components
 fn home() -> Html {
     let navigator = use_navigator().unwrap();
 
-    let on_new_game = {
+    let on_new_game_5x10 = {
         let navigator = navigator.clone();
         Callback::from(move |_| {
-            navigator.push(&Route::RandomGame);
+            navigator.push(&Route::Game {
+                width: 5,
+                height: 10,
+                id: rand::random::<u64>(),
+            });
         })
     };
-
+    let on_new_game_8x16 = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::Game {
+                width: 8,
+                height: 16,
+                id: rand::random::<u64>(),
+            });
+        })
+    };
     let on_rules = {
         let navigator = navigator.clone();
         Callback::from(move |_| {
@@ -251,7 +262,7 @@ fn home() -> Html {
             </p>
             <div style="display: flex; flex-direction: column; gap: 20px; align-items: center;">
                 <button
-                    onclick={on_new_game}
+                    onclick={on_new_game_5x10}
                     style="
                         padding: 15px 40px;
                         font-size: 18px;
@@ -263,7 +274,22 @@ fn home() -> Html {
                         min-width: 200px;
                     "
                 >
-                    {"New Random Game"}
+                    {"5x10"}
+                </button>
+                <button
+                    onclick={on_new_game_8x16}
+                    style="
+                        padding: 15px 40px;
+                        font-size: 18px;
+                        background: #2196F3;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        min-width: 200px;
+                    "
+                >
+                    {"8x16"}
                 </button>
                 <button
                     onclick={on_rules}
@@ -344,6 +370,8 @@ fn rules() -> Html {
 #[derive(Properties, PartialEq)]
 struct GameProps {
     pub puzzle_id: u64,
+    pub width: u8,
+    pub height: u8,
 }
 
 #[function_component(Game)]
@@ -351,12 +379,15 @@ fn game(props: &GameProps) -> Html {
     let state: UseStateHandle<GameState> = use_state(GameState::default);
     let navigator = use_navigator().unwrap();
     let puzzle_id = props.puzzle_id;
+    let width = props.width;
+    let height = props.height;
     {
         let state = state.clone();
 
         use_effect_with(puzzle_id, move |_| {
             {
-                let hashi_grid = hashi::HashiGrid::generate_with_seed(5, 10, puzzle_id).unwrap();
+                let hashi_grid =
+                    hashi::HashiGrid::generate_with_seed(width, height, puzzle_id).unwrap();
 
                 let mut islands = Vec::new();
                 for (island_id, (pos, hashi_island)) in hashi_grid.islands.iter().enumerate() {
@@ -396,7 +427,11 @@ fn game(props: &GameProps) -> Html {
     let on_new_puzzle = {
         let navigator = navigator.clone();
         Callback::from(move |_| {
-            navigator.push(&Route::RandomGame);
+            navigator.push(&Route::Game {
+                width,
+                height,
+                id: rand::random::<u64>(),
+            });
         })
     };
 
@@ -446,7 +481,7 @@ fn game(props: &GameProps) -> Html {
 #[function_component(RandomGameRedirect)]
 fn random_game_redirect() -> Html {
     html! {
-        <Redirect<Route> to={Route::Game { id: rand::random::<u64>() }} />
+        <Redirect<Route> to={Route::Game { id: rand::random::<u64>(), width: 5, height: 10 }} />
     }
 }
 
@@ -490,8 +525,9 @@ Main App with Router
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => html! { <Home /> },
-        Route::RandomGame => html! { <RandomGameRedirect /> },
-        Route::Game { id } => html! { <Game puzzle_id={id} /> },
+        Route::Game { width, height, id } => {
+            html! { <Game width={width} height={height} puzzle_id={id} /> }
+        }
         Route::Rules => html! { <Rules /> },
         Route::NotFound => html! { <NotFound /> },
     }
@@ -612,7 +648,7 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                     </svg>
 
                     { if is_complete {
-                        html! { <VictoryOverlay /> }
+                        html! { <VictoryOverlay next_width={state.grid.width as u8} next_height={state.grid.height as u8} /> }
                     } else {
                         html! {}
                     }}
@@ -622,14 +658,26 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
     }
 }
 
+#[derive(Properties, PartialEq)]
+struct VictoryOverlayProps {
+    next_width: u8,
+    next_height: u8,
+}
+
 #[function_component(VictoryOverlay)]
-fn victory_overlay() -> Html {
+fn victory_overlay(props: &VictoryOverlayProps) -> Html {
     let navigator = use_navigator().unwrap();
+    let nw = props.next_width;
+    let nh = props.next_height;
 
     let on_new_puzzle = {
         let navigator = navigator.clone();
         Callback::from(move |_| {
-            navigator.push(&Route::RandomGame);
+            navigator.push(&Route::Game {
+                width: nw,
+                height: nh,
+                id: rand::random::<u64>(),
+            });
         })
     };
 
