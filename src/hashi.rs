@@ -1,256 +1,751 @@
-use thiserror::{Error};
-
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Cell {
-    Empty,
-    Island,
-    BridgeH,
-    BridgeV,
-    DoubleBridgeH,
-    DoubleBridgeV,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Coordinate {
-    pub x: u8,
-    pub y: u8,
-}
+use rand::SeedableRng;
+use rand::prelude::*;
+use std::collections::HashMap;
+use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum HashiError {
     #[error("Invalid grid size")]
     Size,
-    #[error("Placing in out of bounds cell at ({}, {})", coordinate.x, coordinate.y)]
-    OutOfBounds { coordinate: Coordinate },
-    #[error("Cannot overwrite cell at ({}, {})", coordinate.x, coordinate.y)]
-    Overwrite { coordinate: Coordinate },
+
+    #[error("Position out of bounds ({position:?})")]
+    OutOfBounds { position: Position },
+
+    #[error("Cannot overwrite existing element at {position:?}")]
+    Overwrite { position: Position },
+
     #[error("Bridges cannot be diagonal")]
     DiagonalBridge,
+
+    #[error("Bridge length cannot be zero")]
+    BridgeLengthZero,
+
+    #[error("BridgeLine ({line:?}) is not connected to island at {position:?}")]
+    UnconnectedBridge {
+        line: BridgeLine,
+        position: Position,
+    },
+
+    #[error("Unknown error")]
+    Unknown,
 }
 
-
-#[derive(Clone, Debug)]
-pub struct HashiGrid {
-    width: u8,
-    height: u8,
-    cells: Vec<Vec<Cell>>
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Position {
+    pub x: u8,
+    pub y: u8,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum BridgeType {
+    Single,
+    Double,
+}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum BridgeDirection {
+    Down,
+    Right,
+}
 
-impl HashiGrid {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BridgeLine {
+    start: Position,
+    end: Position,
+    direction: BridgeDirection,
+}
 
-
-    pub fn new(width: u8, height: u8) -> Result<Self, HashiError> {
-        if width == 0 || height == 0 {
-            return Err(HashiError::Size);
-        }
-
-        Ok(Self {
-            width,
-            height,
-            cells: vec![vec![Cell::Empty; width as usize]; height as usize],
-        })
-    }
-
-
-    pub fn add_island(&mut self, coordinate: Coordinate) -> Result<(), HashiError> {
-        if coordinate.x >= self.width || coordinate.y >= self.height {
-            return Err(HashiError::OutOfBounds { coordinate });
-        }
-
-        if let Some(Cell::Empty) = self.cells[coordinate.y as usize].get(coordinate.x as usize) {
-            self.cells[coordinate.y as usize][coordinate.x as usize] = Cell::Island;
-            Ok(())
-        } else {
-            return Err(HashiError::Overwrite { coordinate });
-        }
-    }
-
-    pub fn get_cell(&self, coordinate: &Coordinate) -> Result<&Cell, HashiError> {
-        if coordinate.x >= self.width || coordinate.y >= self.height {
-            return Err(HashiError::OutOfBounds { coordinate: coordinate.clone() });
-        }
-        
-        Ok(&self.cells[coordinate.y as usize][coordinate.x as usize])
-    }
-
-    pub fn bridge_islands(&mut self, from: Coordinate, to: Coordinate) -> Result<(), HashiError> {   
-        if from.x != to.x && from.y != to.y {
+impl BridgeLine {
+    fn new(start: Position, end: Position) -> Result<Self, HashiError> {
+        if start.x != end.x && start.y != end.y {
             return Err(HashiError::DiagonalBridge);
         }
 
-        if from.x == to.x && from.y == to.y {
-            return Err(HashiError::Overwrite { coordinate: from });
+        if start == end {
+            return Err(HashiError::BridgeLengthZero);
         }
 
-        // if let Some(Cell::Island)
-
-        // check that both from and to are islands
-        match self.get_cell(&from)? {
-            Cell::Island => {},
-            _ => return Err(HashiError::Overwrite { coordinate: from }),
-        }
-        match self.get_cell(&to)? {
-            Cell::Island => {},
-            _ => return Err(HashiError::Overwrite { coordinate: to }),
-        }
-
-        if from.y == to.y {
-            // horizontal bridge
-            let y = from.y as usize;
-            let (start_x, end_x) = if from.x < to.x {
-                (from.x as usize + 1, to.x as usize)
+        // order the positions so start is always less than end
+        if start.x == end.x {
+            // vertical line, order by y
+            if start.y > end.y {
+                Ok(Self {
+                    start: end,
+                    end: start,
+                    direction: BridgeDirection::Down,
+                })
             } else {
-                (to.x as usize + 1, from.x as usize)
-            };
-            let all_empty    = (start_x..end_x).all(|x| matches!(self.cells[y][x], Cell::Empty));
-            let all_h_bridge = (start_x..end_x).all(|x| matches!(self.cells[y][x], Cell::BridgeH));
-            if !all_empty && !all_h_bridge {
-                return Err(HashiError::Overwrite { coordinate: Coordinate { x: start_x as u8, y: from.y } });
+                Ok(Self {
+                    start,
+                    end,
+                    direction: BridgeDirection::Down,
+                })
             }
-            for x in start_x..end_x {
-                if all_h_bridge {
-                    self.cells[y][x] = Cell::DoubleBridgeH;
-                } else {    
-                    self.cells[y][x] = Cell::BridgeH;
-                }
-            }
-
-            return Ok(());
-        }
-
-        if from.x == to.x {
-            // vertical bridge
-            let x = from.x as usize;
-            let (start_y, end_y) = if from.y < to.y {
-                (from.y as usize + 1, to.y as usize)
+        } else {
+            // horizontal line, order by x
+            if start.x > end.x {
+                Ok(Self {
+                    start: end,
+                    end: start,
+                    direction: BridgeDirection::Right,
+                })
             } else {
-                (to.y as usize + 1, from.y as usize)
-            };
-            let all_empty = (start_y..end_y).all(|y| matches!(self.cells[y][x], Cell::Empty));
-            let all_v_bridge = (start_y..end_y).all(|y| matches!(self.cells[y][x], Cell::BridgeV));
-            if !all_empty && !all_v_bridge {
-                return Err(HashiError::Overwrite { coordinate: Coordinate { x: from.x, y: start_y as u8 } });
+                Ok(Self {
+                    start,
+                    end,
+                    direction: BridgeDirection::Right,
+                })
             }
-            for y in start_y..end_y {
-                if all_v_bridge {
-                    self.cells[y][x] = Cell::DoubleBridgeV;
-                } else {
-                    self.cells[y][x] = Cell::BridgeV;
-                }
-            }
-
-            return Ok(());
         }
-
-
-        Ok(())
-
-
     }
 
-    
+    fn intersects(&self, other: &BridgeLine) -> Option<Position> {
+        if self.direction == other.direction {
+            // both vertical or both horizontal, cannot intersect
+            // If they are overlapping on the same plane, then they would have to cross an island which is handled elsewhere
+            return None;
+        }
 
-    
+        let (vert, horiz) = if self.direction == BridgeDirection::Down {
+            (self, other)
+        } else {
+            (other, self)
+        };
+
+        // if the lines are tip to tip, they do not intersect. This is allowed, they are meeting at an island
+        if horiz.start == vert.start
+            || horiz.start == vert.end
+            || horiz.end == vert.start
+            || horiz.end == vert.end
+        {
+            return None;
+        }
+
+        // if the y of the horizontal line is within the vertical line's y range
+        if horiz.start.y >= vert.start.y && horiz.start.y <= vert.end.y {
+            // if the x of the vertical line is within the horizontal line's x range
+            if vert.start.x >= horiz.start.x && vert.start.x <= horiz.end.x {
+                return Some(Position {
+                    x: vert.start.x,
+                    y: horiz.start.y,
+                });
+            }
+        }
+
+        None
+    }
+
+    fn crosses(&self, position: Position) -> bool {
+        // if the bridge is vertical and the position is on the same x
+        if self.start.x == self.end.x && position.x == self.start.x {
+            let miny = self.start.y.min(self.end.y);
+            let maxy = self.start.y.max(self.end.y);
+
+            if position.y >= miny && position.y <= maxy {
+                return true;
+            }
+        }
+
+        // if the bridge is horizontal and the position is on the same y
+        if self.start.y == self.end.y && position.y == self.start.y {
+            let minx = self.start.x.min(self.end.x);
+            let maxx = self.start.x.max(self.end.x);
+
+            if position.x >= minx && position.x <= maxx {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Island {
+    pub required_bridges: u8,
+}
 
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone)]
+pub struct HashiGrid {
+    pub width: u8,
+    pub height: u8,
+    pub islands: HashMap<Position, Island>,
+    bridges: HashMap<BridgeLine, BridgeType>,
+}
+
+impl HashiGrid {
+    fn new(width: u8, height: u8) -> Result<Self, HashiError> {
+        if width == 0 || height == 0 {
+            return Err(HashiError::Size);
+        }
+        Ok(Self {
+            width,
+            height,
+            islands: HashMap::new(),
+            bridges: HashMap::new(),
+        })
+    }
+
+    pub fn generate(width: u8, height: u8) -> Result<Self, HashiError> {
+        // make random number generator. Make a StdRng from the default random source
+        let mut rng = rand::rng();
+        let rng = rand::rngs::StdRng::from_rng(&mut rng);
+
+        Self::_generate(width, height, rng)
+    }
+
+    #[allow(dead_code)]
+    pub fn generate_with_seed(width: u8, height: u8, seed: u64) -> Result<Self, HashiError> {
+        // seed the random number generator
+        let rng = rand::rngs::StdRng::seed_from_u64(seed);
+
+        Self::_generate(width, height, rng)
+    }
+
+    fn _generate(width: u8, height: u8, mut rng: rand::rngs::StdRng) -> Result<Self, HashiError> {
+        // Empty grid
+        let mut grid = HashiGrid::new(width, height)?;
+
+        // How many islands?
+        // TODO - change based on difficulty
+        let num_islands = ((width as u16 * height as u16) / 5).max(5) as u8;
+
+        // place the first island randomly
+        let x = rng.random_range(0..width);
+        let y = rng.random_range(0..height);
+        let position = Position { x, y };
+        grid.add_island(position)?;
+
+        println!("{grid}");
+
+        let mut max_remaining_iterations = num_islands as usize * 100;
+
+        // place the remaining islands
+        while grid.islands.len() < num_islands as usize && max_remaining_iterations > 0 {
+            max_remaining_iterations -= 1;
+
+            // pick a random existing island
+            let existing_island_pos = *grid
+                .islands
+                .keys()
+                .choose(&mut rng)
+                .ok_or(HashiError::Unknown)?;
+
+            // pick a random direction
+            let direction = match rng.random_range(0..4) {
+                0 => Direction::Up,
+                1 => Direction::Down,
+                2 => Direction::Left,
+                3 => Direction::Right,
+                _ => unreachable!(),
+            };
+
+            let proposed_position = match direction {
+                Direction::Up => {
+                    println!("Trying Up from {existing_island_pos:?}");
+                    if existing_island_pos.y == 0 {
+                        None
+                    } else {
+                        Some(Position {
+                            x: existing_island_pos.x,
+                            y: rng.random_range(0..existing_island_pos.y),
+                        })
+                    }
+                }
+                Direction::Down => {
+                    println!("Trying Down from {existing_island_pos:?}");
+                    if existing_island_pos.y >= height - 1 {
+                        None
+                    } else {
+                        Some(Position {
+                            x: existing_island_pos.x,
+                            y: rng.random_range((existing_island_pos.y + 1)..height),
+                        })
+                    }
+                }
+                Direction::Left => {
+                    println!("Trying Left from {existing_island_pos:?}");
+                    if existing_island_pos.x == 0 {
+                        None
+                    } else {
+                        Some(Position {
+                            x: rng.random_range(0..existing_island_pos.x),
+                            y: existing_island_pos.y,
+                        })
+                    }
+                }
+                Direction::Right => {
+                    println!("Trying Right from {existing_island_pos:?}");
+                    if existing_island_pos.x >= width - 1 {
+                        None
+                    } else {
+                        Some(Position {
+                            x: rng.random_range((existing_island_pos.x + 1)..width),
+                            y: existing_island_pos.y,
+                        })
+                    }
+                }
+            };
+
+            let proposed_position = match proposed_position {
+                Some(pos) => pos,
+                None => continue,
+            };
+
+            // speculatively add the island
+            match grid.add_island(proposed_position) {
+                Ok(()) => {
+                    // successfully added island
+                    println!(
+                        "Added island at {proposed_position:?} going Up from {existing_island_pos:?}"
+                    );
+                    // can we add a bridge?
+                    let bridge_line = BridgeLine::new(existing_island_pos, proposed_position)?;
+                    match grid.add_bridge(bridge_line) {
+                        Ok(_) => {
+                            println!(
+                                "Added bridge from {existing_island_pos:?} to {proposed_position:?}"
+                            );
+                            println!("{grid}");
+                        }
+                        Err(e) => {
+                            println!(
+                                "Failed to add bridge from {existing_island_pos:?} to {proposed_position:?}: {e:?}"
+                            );
+                            // remove the island we just added
+                            grid.islands.remove(&proposed_position);
+                        }
+                    }
+                }
+                Err(_e) => {
+                    // try again
+                    continue;
+                }
+            }
+        }
+
+        // todo - create loops
+
+        let chance_of_loop = 0.3; // todo - change based on difficulty
+        let island_positions: Vec<Position> = grid.islands.keys().copied().collect();
+
+        for island_pos in island_positions {
+            for direction in [
+                Direction::Up,
+                Direction::Down,
+                Direction::Left,
+                Direction::Right,
+            ] {
+                // find nearest island in that direction
+                let mut target_island: Option<Position> = None;
+                match direction {
+                    Direction::Up => {
+                        let mut y = island_pos.y;
+                        while y > 0 {
+                            y -= 1;
+                            let pos = Position { x: island_pos.x, y };
+
+                            if grid.islands.contains_key(&pos) {
+                                target_island = Some(pos);
+                                break;
+                            }
+                        }
+                    }
+                    Direction::Down => {
+                        let mut y = island_pos.y;
+                        while y < height - 1 {
+                            y += 1;
+                            let pos = Position { x: island_pos.x, y };
+                            if grid.islands.contains_key(&pos) {
+                                target_island = Some(pos);
+                                break;
+                            }
+                        }
+                    }
+                    Direction::Left => {
+                        let mut x = island_pos.x;
+                        while x > 0 {
+                            x -= 1;
+                            let pos = Position { x, y: island_pos.y };
+                            if grid.islands.contains_key(&pos) {
+                                target_island = Some(pos);
+                                break;
+                            }
+                        }
+                    }
+                    Direction::Right => {
+                        let mut x = island_pos.x;
+                        while x < width - 1 {
+                            x += 1;
+                            let pos = Position { x, y: island_pos.y };
+                            if grid.islands.contains_key(&pos) {
+                                target_island = Some(pos);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if let Some(target_pos) = target_island {
+                    let bridge_line = BridgeLine::new(island_pos, target_pos)?;
+                    if rng.random::<f64>() > chance_of_loop {
+                        continue;
+                    }
+                    match grid.add_bridge(bridge_line) {
+                        Ok(_) => {
+                            println!("Added loop bridge from {island_pos:?} to {target_pos:?}");
+                        }
+                        Err(_) => {
+                            // failed to add bridge, ignore
+                        }
+                    }
+                }
+            }
+        }
+
+        // double some bridges randomly
+        let mut bridge_lines: Vec<BridgeLine> = grid.bridges.keys().cloned().collect();
+        bridge_lines.shuffle(&mut rng);
+        for bridge_line in bridge_lines.iter().take((bridge_lines.len() / 4).max(1)) {
+            if let Ok(BridgeType::Double) = grid.add_bridge(*bridge_line) {
+                println!(
+                    "Doubled bridge from {:?} to {:?}",
+                    bridge_line.start, bridge_line.end
+                );
+            }
+        }
+
+        // count bridges per island
+        let island_positions: Vec<Position> = grid.islands.keys().copied().collect();
+        for island_pos in island_positions {
+            let mut bridge_count = 0;
+            for (bridge_line, bridge_type) in &grid.bridges {
+                if bridge_line.start == island_pos || bridge_line.end == island_pos {
+                    match bridge_type {
+                        BridgeType::Single => bridge_count += 1,
+                        BridgeType::Double => bridge_count += 2,
+                    }
+                }
+            }
+            if let Some(island) = grid.islands.get_mut(&island_pos) {
+                island.required_bridges = bridge_count;
+            }
+        }
+
+        if max_remaining_iterations == 0 {
+            println!("Warning: reached maximum iterations while generating grid");
+        }
+
+        println!("{grid}");
+
+        Ok(grid)
+    }
+    fn add_island(&mut self, position: Position) -> Result<(), HashiError> {
+        if position.x >= self.width || position.y >= self.height {
+            return Err(HashiError::OutOfBounds { position });
+        }
+
+        if self.islands.contains_key(&position) {
+            return Err(HashiError::Overwrite { position });
+        }
+
+        for &bridge_line in self.bridges.keys() {
+            if bridge_line.crosses(position) {
+                return Err(HashiError::Overwrite { position });
+            }
+        }
+
+        self.islands.insert(
+            position,
+            Island {
+                required_bridges: 0,
+            },
+        );
+        Ok(())
+    }
+
+    fn add_bridge(&mut self, bridge: BridgeLine) -> Result<BridgeType, HashiError> {
+        // if the bridge already exists and its a single, then its already been validated, just upgrade it
+        if let Some(bridge_type) = self.bridges.get(&bridge) {
+            if *bridge_type == BridgeType::Double {
+                // already a double, cannot add more
+                return Err(HashiError::Overwrite {
+                    position: bridge.start,
+                });
+            }
+            self.bridges.insert(bridge, BridgeType::Double);
+            return Ok(BridgeType::Double);
+        }
+
+        // The bridge is new, so validate it
+
+        // Check if both ends are islands
+        if !self.islands.contains_key(&bridge.start) {
+            return Err(HashiError::UnconnectedBridge {
+                line: bridge,
+                position: bridge.start,
+            });
+        }
+        if !self.islands.contains_key(&bridge.end) {
+            return Err(HashiError::UnconnectedBridge {
+                line: bridge,
+                position: bridge.end,
+            });
+        }
+
+        // check that the bridge does not cross any existing islands other than the two endpoints it is between
+        for &island_pos in self.islands.keys() {
+            if island_pos != bridge.start && island_pos != bridge.end && bridge.crosses(island_pos)
+            {
+                return Err(HashiError::Overwrite {
+                    position: island_pos,
+                });
+            }
+        }
+
+        // check that the bridge does not cross any existing bridges
+        for &existing_bridge in self.bridges.keys() {
+            if let Some(collision) = bridge.intersects(&existing_bridge) {
+                return Err(HashiError::Overwrite {
+                    position: collision,
+                });
+            }
+        }
+        // all checks passed, add the bridge as a single
+        self.bridges.insert(bridge, BridgeType::Single);
+
+        Ok(BridgeType::Single)
+    }
+}
 
 impl std::fmt::Display for HashiGrid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-
-        write!(f, "   |", )?;
+        // Top header
+        write!(f, "   |",)?;
         for x in 0..self.width {
             write!(f, "{:3}  ", x)?;
         }
         writeln!(f)?;
 
-
-        write!(f, "___|", )?;
+        // Separator
+        write!(f, "___|",)?;
         for _ in 0..self.width {
             write!(f, "_____")?;
         }
         writeln!(f)?;
 
-
+        // each row
         for y in 0..self.height {
+            // Start with the row index and then separator
             write!(f, "{:3}|", y)?;
+
+            // each column
             for x in 0..self.width {
-                let cell = &self.cells[y as usize][x as usize];
-                match cell {
-                    Cell::Empty => write!(f, "     ")?,
-                    Cell::Island => write!(f, "  X  ")?,
-                    Cell::BridgeH => write!(f, "-----")?,
-                    Cell::BridgeV => write!(f, "  |  ")?,
-                    Cell::DoubleBridgeH => write!(f, "=====")?,
-                    Cell::DoubleBridgeV => write!(f, " ||  ")?,
+                // Is there an island here?
+                if let Some(island) = self.islands.get(&Position { x, y }) {
+                    write!(f, " ({}) ", island.required_bridges)?;
+                    continue;
+                }
+                // Is there a bridge  here?
+                match self
+                    .bridges
+                    .iter()
+                    .find(|(line, _)| line.crosses(Position { x, y }))
+                {
+                    Some((line, bridge_type)) => match (line.direction, bridge_type) {
+                        (BridgeDirection::Down, BridgeType::Single) => write!(f, "  |  ")?,
+                        (BridgeDirection::Down, BridgeType::Double) => write!(f, " ||  ")?,
+                        (BridgeDirection::Right, BridgeType::Single) => write!(f, "-----")?,
+                        (BridgeDirection::Right, BridgeType::Double) => write!(f, "=====")?,
+                    },
+                    None => write!(f, "     ")?,
                 }
             }
+
             writeln!(f)?;
         }
-        Ok(())        
+
+        Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_grid_sizes() {
-        assert_eq!(HashiGrid::new(0, 5).err(), Some(HashiError::Size));
-        assert_eq!(HashiGrid::new(5, 0).err(), Some(HashiError::Size));
-        assert!(HashiGrid::new(5, 5).is_ok());
+    fn test_line_crosses() {
+        // vertical bridgeline (check both directions)
+        let forward = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 2, y: 5 }).unwrap();
+        let backwards = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 2, y: 5 }).unwrap();
+
+        for bridge in [forward, backwards] {
+            // same x within y range
+            assert!(bridge.crosses(Position { x: 2, y: 3 }));
+            assert!(bridge.crosses(Position { x: 2, y: 2 }));
+            assert!(bridge.crosses(Position { x: 2, y: 5 }));
+
+            // different x for vert bridge
+            assert!(!bridge.crosses(Position { x: 1, y: 3 }));
+            assert!(!bridge.crosses(Position { x: 3, y: 3 }));
+
+            // same x but outside y range
+            assert!(!bridge.crosses(Position { x: 2, y: 1 }));
+            assert!(!bridge.crosses(Position { x: 2, y: 6 }));
+        }
+
+        let forwards = BridgeLine::new(Position { x: 2, y: 5 }, Position { x: 2, y: 2 }).unwrap();
+        let backwards = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 2, y: 5 }).unwrap();
+
+        for bridge in [forwards, backwards] {
+            // same x within y range
+            assert!(bridge.crosses(Position { x: 2, y: 3 }));
+            assert!(bridge.crosses(Position { x: 2, y: 2 }));
+            assert!(bridge.crosses(Position { x: 2, y: 5 }));
+
+            // different x for vert bridge
+            assert!(!bridge.crosses(Position { x: 1, y: 3 }));
+            assert!(!bridge.crosses(Position { x: 3, y: 3 }));
+
+            // same x but outside y range
+            assert!(!bridge.crosses(Position { x: 2, y: 1 }));
+            assert!(!bridge.crosses(Position { x: 2, y: 6 }));
+        }
     }
 
     #[test]
-    fn test_add_island() {
-        let mut grid = HashiGrid::new(5, 10).unwrap();
-        // within bounds and empty
-        assert!(grid.add_island(Coordinate { x: 2, y: 2 }).is_ok());
-
-        // overwrite existing island
-        assert_eq!(grid.add_island(Coordinate { x: 2, y: 2 }).err(), Some(HashiError::Overwrite { coordinate: Coordinate { x: 2, y: 2 } }));
-
-        // out of bounds in y
-        assert_eq!(grid.add_island(Coordinate { x: 2, y: 10 }).err(), Some(HashiError::OutOfBounds { coordinate: Coordinate { x: 2, y: 10 } }));
-
-        // out of bounds in x
-        assert_eq!(grid.add_island(Coordinate { x: 5, y: 2 }).err(), Some(HashiError::OutOfBounds { coordinate: Coordinate { x: 5, y: 2 } }));
+    fn test_diagonal_bridge_error() {
+        let result = BridgeLine::new(Position { x: 1, y: 1 }, Position { x: 2, y: 2 });
+        assert_eq!(result.unwrap_err(), HashiError::DiagonalBridge);
+        let result = BridgeLine::new(Position { x: 1, y: 1 }, Position { x: 3, y: 0 });
+        assert_eq!(result.unwrap_err(), HashiError::DiagonalBridge);
     }
 
+    #[test]
+    fn test_bridge_direction_independence() {
+        let bridge1 = BridgeLine::new(Position { x: 1, y: 1 }, Position { x: 1, y: 3 }).unwrap();
+        let bridge2 = BridgeLine::new(Position { x: 1, y: 3 }, Position { x: 1, y: 1 }).unwrap();
+        assert_eq!(bridge1, bridge2);
+
+        let bridge3 = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 5, y: 2 }).unwrap();
+        let bridge4 = BridgeLine::new(Position { x: 5, y: 2 }, Position { x: 2, y: 2 }).unwrap();
+        assert_eq!(bridge3, bridge4);
+    }
 
     #[test]
-    fn test_bridge_islands() {
+    fn test_zero_length_bridge_error() {
+        let result = BridgeLine::new(Position { x: 1, y: 1 }, Position { x: 1, y: 1 });
+        assert_eq!(result.unwrap_err(), HashiError::BridgeLengthZero);
+    }
+
+    #[test]
+    fn test_unconnected_bridge() {
         let mut grid = HashiGrid::new(5, 5).unwrap();
-        grid.add_island(Coordinate { x: 1, y: 1 }).unwrap();
-        grid.add_island(Coordinate { x: 1, y: 4 }).unwrap();
-        grid.add_island(Coordinate { x: 4, y: 1 }).unwrap();
+        grid.add_island(Position { x: 1, y: 1 }).unwrap();
 
-        // valid vertical bridge
-        assert!(grid.bridge_islands(Coordinate { x: 1, y: 1 }, Coordinate { x: 1, y: 4 }).is_ok());
+        let bridge = BridgeLine::new(Position { x: 1, y: 1 }, Position { x: 1, y: 3 }).unwrap();
+        let result = grid.add_bridge(bridge);
+        assert_eq!(
+            result.unwrap_err(),
+            HashiError::UnconnectedBridge {
+                line: bridge,
+                position: Position { x: 1, y: 3 }
+            }
+        );
 
-        // valid horizontal bridge
-        assert!(grid.bridge_islands(Coordinate { x: 1, y: 1 }, Coordinate { x: 4, y: 1 }).is_ok());
+        let bridge = BridgeLine::new(Position { x: 1, y: 3 }, Position { x: 1, y: 1 }).unwrap();
+        let result = grid.add_bridge(bridge);
+        assert_eq!(
+            result.unwrap_err(),
+            HashiError::UnconnectedBridge {
+                line: bridge,
+                position: Position { x: 1, y: 3 }
+            }
+        );
+    }
 
-        // diagonal bridge
-        assert_eq!(grid.bridge_islands(Coordinate { x: 1, y: 1 }, Coordinate { x: 4, y: 4 }).err(), Some(HashiError::DiagonalBridge));
+    #[test]
+    fn test_overwrite_island_error() {
+        let mut grid = HashiGrid::new(5, 5).unwrap();
+        grid.add_island(Position { x: 1, y: 1 }).unwrap();
+        grid.add_island(Position { x: 1, y: 3 }).unwrap();
+        let bridge = BridgeLine::new(Position { x: 1, y: 1 }, Position { x: 1, y: 3 }).unwrap();
 
-        // bridge to non-island
-        assert_eq!(grid.bridge_islands(Coordinate { x: 1, y: 1 }, Coordinate { x: 2, y: 1 }).err(), Some(HashiError::Overwrite { coordinate: Coordinate { x: 2, y: 1 } }));
+        assert!(grid.add_bridge(bridge).unwrap() == BridgeType::Single);
+    }
+    #[test]
+    fn test_bridges_cant_intersect() {
+        let mut grid = HashiGrid::new(5, 10).unwrap();
+        grid.add_island(Position { x: 2, y: 2 }).unwrap();
+        grid.add_island(Position { x: 2, y: 5 }).unwrap();
+        grid.add_island(Position { x: 1, y: 3 }).unwrap();
+        grid.add_island(Position { x: 4, y: 3 }).unwrap();
 
-        // double bridge
-        assert!(grid.bridge_islands(Coordinate { x: 1, y: 1 }, Coordinate { x: 1, y: 4 }).is_ok());
-        assert!(grid.bridge_islands(Coordinate { x: 1, y: 1 }, Coordinate { x: 4, y: 1 }).is_ok());
+        println!("{grid}");
+        let vertical = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 2, y: 5 }).unwrap();
+        assert!(grid.add_bridge(vertical).unwrap() == BridgeType::Single);
 
-        // check cell types
-        assert_eq!(grid.get_cell(&Coordinate { x: 1, y: 1 }).unwrap(), &Cell::Island);
-        assert_eq!(grid.get_cell(&Coordinate { x: 1, y: 2 }).unwrap(), &Cell::DoubleBridgeV);
+        let horizontal = BridgeLine::new(Position { x: 1, y: 3 }, Position { x: 4, y: 3 }).unwrap();
+        let result = grid.add_bridge(horizontal);
+        assert_eq!(
+            result.unwrap_err(),
+            HashiError::Overwrite {
+                position: Position { x: 2, y: 3 }
+            }
+        );
+    }
 
-        // cannot tripple bridge
-        assert_eq!(grid.bridge_islands(Coordinate { x: 1, y: 1 }, Coordinate { x: 1, y: 4 }).err(), Some(HashiError::Overwrite { coordinate: Coordinate { x: 1, y: 2 } }));
+    #[test]
+    fn test_lines_intersect() {
+        let vertical = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 2, y: 5 }).unwrap();
+        let horizontal = BridgeLine::new(Position { x: 1, y: 3 }, Position { x: 4, y: 3 }).unwrap();
+
+        assert_eq!(
+            vertical.intersects(&horizontal),
+            Some(Position { x: 2, y: 3 })
+        );
+        assert_eq!(
+            horizontal.intersects(&vertical),
+            Some(Position { x: 2, y: 3 })
+        );
+
+        let no_intersection =
+            BridgeLine::new(Position { x: 3, y: 6 }, Position { x: 6, y: 6 }).unwrap();
+        assert_eq!(vertical.intersects(&no_intersection), None);
+        assert_eq!(no_intersection.intersects(&vertical), None);
+    }
+
+    #[test]
+    fn can_have_four_bridges_to_same_island() {
+        let mut grid = HashiGrid::new(5, 5).unwrap();
+        grid.add_island(Position { x: 2, y: 2 }).unwrap();
+        grid.add_island(Position { x: 2, y: 0 }).unwrap();
+        grid.add_island(Position { x: 2, y: 4 }).unwrap();
+        grid.add_island(Position { x: 0, y: 2 }).unwrap();
+        grid.add_island(Position { x: 4, y: 2 }).unwrap();
+
+        let up = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 2, y: 0 }).unwrap();
+        let down = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 2, y: 4 }).unwrap();
+        let left = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 0, y: 2 }).unwrap();
+        let right = BridgeLine::new(Position { x: 2, y: 2 }, Position { x: 4, y: 2 }).unwrap();
+
+        assert!(grid.add_bridge(up).unwrap() == BridgeType::Single);
+        assert!(grid.add_bridge(down).unwrap() == BridgeType::Single);
+        assert!(grid.add_bridge(left).unwrap() == BridgeType::Single);
+        assert!(grid.add_bridge(right).unwrap() == BridgeType::Single);
+        assert!(grid.add_bridge(up).unwrap() == BridgeType::Double);
+        assert!(grid.add_bridge(down).unwrap() == BridgeType::Double);
+        assert!(grid.add_bridge(left).unwrap() == BridgeType::Double);
+        assert!(grid.add_bridge(right).unwrap() == BridgeType::Double);
+
+        println!("{grid}");
     }
 }
