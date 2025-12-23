@@ -481,6 +481,9 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                                 s.shuddered_island = Some(id);
                                 s.selected = None;
                             }
+                        } else {
+                            // Clicking the already selected island toggles it off
+                            s.selected = None;
                         }
                     }
                 }
