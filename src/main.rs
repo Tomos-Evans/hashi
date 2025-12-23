@@ -476,7 +476,7 @@ fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<Position>) -> 
                     <circle
                         cx={(position.x as i32 * 100).to_string()}
                         cy={(position.y as i32 * 100).to_string()}
-                        r={50}
+                        r={35}
                         fill="transparent"
                     />
                     <circle
