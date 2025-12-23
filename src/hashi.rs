@@ -213,7 +213,7 @@ impl HashiGrid {
 
         // How many islands?
         // TODO - change based on difficulty
-        let num_islands = ((width as u16 * height as u16) / 5).max(5) as u8;
+        let num_islands = ((width as u16 * height as u16) / 5).max(8) as u8;
 
         // place the first island randomly
         let x = rng.random_range(0..width);
@@ -238,7 +238,8 @@ impl HashiGrid {
                 1 => Direction::Down,
                 2 => Direction::Left,
                 3 => Direction::Right,
-                _ => unreachable!(),
+                _ => Direction::Right, // This should be unreachable, but in the event its not, better to favor Right than to panic
+                                       // I am not using `choose` with a custom impl of sample as you cannot pass rng, would not be deterministic
             };
 
             let proposed_position = match direction {
@@ -312,7 +313,7 @@ impl HashiGrid {
 
         // todo - create loops
 
-        let chance_of_loop = 0.3; // todo - change based on difficulty
+        let chance_of_loop = 0.6; // todo - change based on difficulty
         let island_positions: Vec<Position> = grid.islands.keys().copied().collect();
 
         for island_pos in island_positions {
@@ -373,25 +374,31 @@ impl HashiGrid {
                 }
 
                 if let Some(target_pos) = target_island {
-                    let bridge_line = BridgeLine::new(island_pos, target_pos)?;
                     if rng.random::<f64>() > chance_of_loop {
                         continue;
                     }
-                    match grid.add_bridge(bridge_line) {
-                        Ok(_) => {}
-                        Err(_) => {
-                            // failed to add bridge, ignore
-                        }
-                    }
+                    // At this point if this fails it does not matter, it just means it would have crossed another bridge.
+                    // Safe to ignore the error
+                    let _ = grid.add_bridge(BridgeLine::new(island_pos, target_pos)?);
                 }
             }
         }
 
         // double some bridges randomly
-        let mut bridge_lines: Vec<BridgeLine> = grid.bridges.keys().cloned().collect();
-        bridge_lines.shuffle(&mut rng);
-        for bridge_line in bridge_lines.iter().take((bridge_lines.len() / 4).max(1)) {
-            if let Ok(BridgeType::Double) = grid.add_bridge(*bridge_line) {}
+        let bridge_lines_to_double: Vec<BridgeLine> = grid
+            .bridges
+            .iter()
+            .filter_map(|(bridge_line, bridge_type)| {
+                if *bridge_type == BridgeType::Single && rng.random::<f64>() < 0.3 {
+                    Some(*bridge_line)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for bridge_line in bridge_lines_to_double {
+            let _ = grid.add_bridge(bridge_line);
         }
 
         // count bridges per island
@@ -413,7 +420,8 @@ impl HashiGrid {
 
         Ok(grid)
     }
-    fn add_island(&mut self, position: Position) -> Result<(), HashiError> {
+
+    fn can_add_island(&self, position: Position) -> Result<(), HashiError> {
         if position.x >= self.width || position.y >= self.height {
             return Err(HashiError::OutOfBounds { position });
         }
@@ -428,66 +436,83 @@ impl HashiGrid {
             }
         }
 
+        Ok(())
+    }
+
+    fn add_island(&mut self, position: Position) -> Result<(), HashiError> {
+        self.can_add_island(position)?;
+
         self.islands.insert(
             position,
             Island {
                 required_bridges: 0,
             },
         );
+
         Ok(())
     }
 
-    fn add_bridge(&mut self, bridge: BridgeLine) -> Result<BridgeType, HashiError> {
-        // if the bridge already exists and its a single, then its already been validated, just upgrade it
-        if let Some(bridge_type) = self.bridges.get(&bridge) {
-            if *bridge_type == BridgeType::Double {
+    fn can_bridge(&self, bridge: BridgeLine) -> Result<BridgeType, HashiError> {
+        // If the bridge already exists and its a single, then its already been validated. Allow double
+        if let Some(BridgeType::Single) = self.bridges.get(&bridge) {
+            return Ok(BridgeType::Double);
+        }
+
+        match self.bridges.get(&bridge) {
+            Some(BridgeType::Double) => {
                 // already a double, cannot add more
                 return Err(HashiError::Overwrite {
                     position: bridge.start,
                 });
             }
-            self.bridges.insert(bridge, BridgeType::Double);
-            return Ok(BridgeType::Double);
-        }
-
-        // The bridge is new, so validate it
-
-        // Check if both ends are islands
-        if !self.islands.contains_key(&bridge.start) {
-            return Err(HashiError::UnconnectedBridge {
-                line: bridge,
-                position: bridge.start,
-            });
-        }
-        if !self.islands.contains_key(&bridge.end) {
-            return Err(HashiError::UnconnectedBridge {
-                line: bridge,
-                position: bridge.end,
-            });
-        }
-
-        // check that the bridge does not cross any existing islands other than the two endpoints it is between
-        for &island_pos in self.islands.keys() {
-            if island_pos != bridge.start && island_pos != bridge.end && bridge.crosses(island_pos)
-            {
-                return Err(HashiError::Overwrite {
-                    position: island_pos,
-                });
+            Some(BridgeType::Single) => {
+                // already a single, can upgrade to double. No need to validate it again
+                return Ok(BridgeType::Double);
             }
-        }
+            None => {
+                // does not exist yet, proceed with validation
 
-        // check that the bridge does not cross any existing bridges
-        for &existing_bridge in self.bridges.keys() {
-            if let Some(collision) = bridge.intersects(&existing_bridge) {
-                return Err(HashiError::Overwrite {
-                    position: collision,
-                });
+                // Check that both ends of the bridgeline are connected to islands
+                for end in [bridge.start, bridge.end] {
+                    if !self.islands.contains_key(&end) {
+                        return Err(HashiError::UnconnectedBridge {
+                            line: bridge,
+                            position: end,
+                        });
+                    }
+                }
+
+                // check that the bridge does not cross any existing islands other than the two endpoints it is between
+                for &island_pos in self.islands.keys() {
+                    if island_pos != bridge.start
+                        && island_pos != bridge.end
+                        && bridge.crosses(island_pos)
+                    {
+                        return Err(HashiError::Overwrite {
+                            position: island_pos,
+                        });
+                    }
+                }
+
+                // check that the bridge does not cross any existing bridges
+                for &existing_bridge in self.bridges.keys() {
+                    if let Some(collision) = bridge.intersects(&existing_bridge) {
+                        return Err(HashiError::Overwrite {
+                            position: collision,
+                        });
+                    }
+                }
             }
-        }
-        // all checks passed, add the bridge as a single
-        self.bridges.insert(bridge, BridgeType::Single);
+        };
 
+        // All checks passed, can add single bridge
         Ok(BridgeType::Single)
+    }
+
+    fn add_bridge(&mut self, bridge: BridgeLine) -> Result<BridgeType, HashiError> {
+        let suitable_bridge_type = self.can_bridge(bridge)?;
+        self.bridges.insert(bridge, suitable_bridge_type);
+        Ok(suitable_bridge_type)
     }
 }
 
