@@ -388,7 +388,7 @@ fn game(props: &GameProps) -> Html {
     };
 
     html! {
-        <div>
+        <div class="game-wrapper">
             <div class="game-controls">
                 <button onclick={on_back} class="btn btn-game-large">
                     {"← Back"}
@@ -493,40 +493,33 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
         let height = state.grid.height * 100;
 
         html! {
-            <>
-                <style>
-                    {r#"
-                        #selectedGlow { }
-                    "#}  
-                </style>
-                <div class="game-container">
-                    <svg
-                        viewBox={format!("-100 -100 {} {}", width + 100, height + 100)}
-                        preserveAspectRatio="xMidYMid meet"
-                        class="game-svg"
-                    >
-                        <defs>
-                            <filter id="selectedGlow">
-                                <feDropShadow
-                                    dx="0"
-                                    dy="0"
-                                    stdDeviation="5"
-                                    flood-color="#2196F3"
-                                    flood-opacity="0.7"
-                                />
-                            </filter>
-                        </defs>
-                        { render_bridges(state) }
-                        { render_islands(state, on_island_click) }
-                    </svg>
+            <div class="game-container">
+                <svg
+                    viewBox={format!("-100 -100 {} {}", width + 100, height + 100)}
+                    preserveAspectRatio="xMidYMid meet"
+                    class="game-svg"
+                >
+                    <defs>
+                        <filter id="selectedGlow">
+                            <feDropShadow
+                                dx="0"
+                                dy="0"
+                                stdDeviation="5"
+                                flood-color="#2196F3"
+                                flood-opacity="0.7"
+                            />
+                        </filter>
+                    </defs>
+                    { render_bridges(state) }
+                    { render_islands(state, on_island_click) }
+                </svg>
 
-                    { if is_complete {
-                        html! { <VictoryOverlay next_width={state.grid.width as u8} next_height={state.grid.height as u8} /> }
-                    } else {
-                        html! {}
-                    }}
-                </div>
-            </>
+                { if is_complete {
+                    html! { <VictoryOverlay next_width={state.grid.width as u8} next_height={state.grid.height as u8} /> }
+                } else {
+                    html! {}
+                }}
+            </div>
         }
     }
 }

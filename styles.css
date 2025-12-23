@@ -41,6 +41,7 @@ body {
     font-family: sans-serif;
     margin: 0;
     padding: 0;
+    overflow: hidden;
 }
 
 /* ==================== Home Page ==================== */
@@ -200,14 +201,27 @@ body {
 
 /* ==================== Game Page ==================== */
 
+.game-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
 .game-container {
+    flex: 1;
     width: 100%;
-    overflow: auto;
+    overflow: hidden;
     position: relative;
-    -webkit-overflow-scrolling: touch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f5f5f5;
 }
 
 .game-controls {
+    flex-shrink: 0;
     padding: 12px;
     display: flex;
     gap: 12px;
@@ -224,7 +238,9 @@ body {
 }
 
 .game-svg {
-    width: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
     height: auto;
     display: block;
     background: #f5f5f5;
@@ -353,8 +369,8 @@ body {
     .game-controls .btn {
         flex: 0;
         min-width: auto;
-        font-size: 24px;
-        padding: 24px 38px;
+        font-size: 18px;
+        padding: 16px 30px;
     }
 
     .victory-emoji {
