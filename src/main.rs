@@ -1,7 +1,7 @@
-// use gloo::net::http::Request;
-use serde::Deserialize;
-use std::{collections::HashMap, str};
-// use wasm_bindgen_futures::spawn_local;
+use crate::hashi::{BridgeLine, HashiGrid, Position};
+use std::str;
+use web_sys::console;
+use web_sys::wasm_bindgen::JsValue;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -29,194 +29,24 @@ enum Route {
 }
 
 /* =======================
-Data model
-======================= */
-
-#[derive(Clone, Deserialize)]
-struct Grid {
-    width: u32,
-    height: u32,
-    islands: Vec<Island>,
-}
-
-#[derive(Clone, Deserialize, Copy)]
-struct Island {
-    id: u32,
-    x: i32,
-    y: i32,
-    required: u8,
-}
-
-/* =======================
 Game state
 ======================= */
 
 #[derive(Clone)]
 struct GameState {
-    grid: Grid,
-    bridges: HashMap<(u32, u32), u8>,
-    selected: Option<u32>,
-    shuddered_island: Option<u32>,
+    grid: HashiGrid,
+    selected: Option<Position>,
+    shuddered_island: Option<Position>,
 }
 
 impl Default for GameState {
     fn default() -> Self {
         GameState {
-            grid: Grid {
-                width: 0,
-                height: 0,
-                islands: vec![],
-            },
-            bridges: HashMap::new(),
+            grid: HashiGrid::placeholder(),
             selected: None,
             shuddered_island: None,
         }
     }
-}
-
-/* =======================
-Rule helpers
-======================= */
-
-impl GameState {
-    fn island(&self, id: u32) -> &Island {
-        self.grid.islands.iter().find(|i| i.id == id).unwrap()
-    }
-
-    fn bridges_for(&self, id: u32) -> u8 {
-        self.bridges
-            .iter()
-            .filter(|((a, b), _)| *a == id || *b == id)
-            .map(|(_, c)| *c)
-            .sum()
-    }
-
-    fn can_add_bridge(&self, a: u32, b: u32) -> bool {
-        let ia = self.island(a);
-        let ib = self.island(b);
-
-        // must align
-        if ia.x != ib.x && ia.y != ib.y {
-            return false;
-        }
-
-        // no island in between
-        if blocked(ia, ib, &self.grid.islands) {
-            return false;
-        }
-
-        let key = (a.min(b), a.max(b));
-        let existing = *self.bridges.get(&key).unwrap_or(&0);
-        if existing >= 2 {
-            return false;
-        }
-
-        if self.bridges_for(a) + 1 > ia.required {
-            return false;
-        }
-        if self.bridges_for(b) + 1 > ib.required {
-            return false;
-        }
-
-        // crossing check
-        for (x, y) in self.bridges.keys() {
-            let i1 = self.island(*x);
-            let i2 = self.island(*y);
-            if crosses(ia, ib, i1, i2) {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    fn is_complete(&self) -> bool {
-        if self.grid.islands.is_empty() {
-            return false;
-        }
-
-        // Check if all islands have the required number of bridges
-        for island in &self.grid.islands {
-            if self.bridges_for(island.id) != island.required {
-                return false;
-            }
-        }
-
-        // Check if all islands are connected (using DFS/BFS)
-        if !self.is_connected() {
-            return false;
-        }
-
-        true
-    }
-
-    fn is_connected(&self) -> bool {
-        if self.grid.islands.is_empty() {
-            return true;
-        }
-
-        let mut visited = std::collections::HashSet::new();
-        let mut stack = vec![self.grid.islands[0].id];
-
-        while let Some(current) = stack.pop() {
-            if visited.contains(&current) {
-                continue;
-            }
-            visited.insert(current);
-
-            // Find all connected islands
-            for (a, b) in self.bridges.keys() {
-                if *a == current && !visited.contains(b) {
-                    stack.push(*b);
-                } else if *b == current && !visited.contains(a) {
-                    stack.push(*a);
-                }
-            }
-        }
-
-        visited.len() == self.grid.islands.len()
-    }
-}
-
-fn blocked(a: &Island, b: &Island, islands: &[Island]) -> bool {
-    islands.iter().any(|i| {
-        if i.id == a.id || i.id == b.id {
-            return false;
-        }
-
-        if a.x == b.x && i.x == a.x {
-            i.y > a.y.min(b.y) && i.y < a.y.max(b.y)
-        } else if a.y == b.y && i.y == a.y {
-            i.x > a.x.min(b.x) && i.x < a.x.max(b.x)
-        } else {
-            false
-        }
-    })
-}
-
-fn crosses(a1: &Island, b1: &Island, a2: &Island, b2: &Island) -> bool {
-    let h1 = a1.y == b1.y;
-    let h2 = a2.y == b2.y;
-
-    if h1 == h2 {
-        return false;
-    }
-
-    let (h, v) = if h1 {
-        ((a1, b1), (a2, b2))
-    } else {
-        ((a2, b2), (a1, b1))
-    };
-
-    let hy = h.0.y;
-    let hx1 = h.0.x.min(h.1.x);
-    let hx2 = h.0.x.max(h.1.x);
-
-    let vx = v.0.x;
-    let vy1 = v.0.y.min(v.1.y);
-    let vy2 = v.0.y.max(v.1.y);
-
-    vx > hx1 && vx < hx2 && hy > vy1 && hy < vy2
 }
 
 /* =======================
@@ -338,29 +168,12 @@ fn game(props: &GameProps) -> Html {
 
         use_effect_with(puzzle_id, move |_| {
             {
-                let hashi_grid =
-                    hashi::HashiGrid::generate_with_seed(width, height, puzzle_id).unwrap();
-
-                let mut islands = Vec::new();
-                for (island_id, (pos, hashi_island)) in hashi_grid.islands.iter().enumerate() {
-                    islands.push(Island {
-                        id: island_id as u32,
-                        x: pos.x as i32,
-                        y: pos.y as i32,
-                        required: hashi_island.required_bridges,
-                    });
-                }
-
-                // generate a puzzle
-                let game_grid = Grid {
-                    width: hashi_grid.width as u32,
-                    height: hashi_grid.height as u32,
-                    islands,
-                };
+                let hashi_grid = hashi::HashiGrid::generate_with_seed(width, height, puzzle_id)
+                    .unwrap()
+                    .wipe_bridges();
 
                 state.set(GameState {
-                    grid: game_grid,
-                    bridges: HashMap::new(),
+                    grid: hashi_grid,
                     selected: None,
                     shuddered_island: None,
                 });
@@ -459,24 +272,41 @@ Game Rendering
 ======================= */
 
 fn render_game(state: &UseStateHandle<GameState>) -> Html {
-    let is_complete = state.is_complete();
+    let is_complete = state.grid.is_complete();
 
     let on_island_click = {
         let state = state.clone();
-        Callback::from(move |id: u32| {
+        Callback::from(move |currently_selected: hashi::Position| {
             let mut s = (*state).clone();
 
             match s.selected {
-                None => s.selected = Some(id),
-                Some(prev) => {
-                    if prev != id {
-                        if s.can_add_bridge(prev, id) {
-                            let key = (prev.min(id), prev.max(id));
-                            *s.bridges.entry(key).or_insert(0) += 1;
-                            s.selected = None;
-                        } else {
-                            s.shuddered_island = Some(id);
-                            s.selected = None;
+                None => s.selected = Some(currently_selected),
+                Some(previously_selected) => {
+                    if previously_selected != currently_selected {
+                        // Is there a valid bridgeline between the two?
+
+                        let proposed_bridge =
+                            match hashi::BridgeLine::new(previously_selected, currently_selected) {
+                                Err(_) => {
+                                    // Invalid bridge (diagonal)
+                                    s.shuddered_island = Some(currently_selected);
+                                    s.selected = None;
+                                    state.set(s);
+                                    return;
+                                }
+                                Ok(b) => b,
+                            };
+
+                        match s.grid.add_bridge(proposed_bridge) {
+                            Ok(_) => {
+                                s.selected = None;
+                                s.shuddered_island = None;
+                            }
+                            Err(_) => {
+                                // Invalid bridge placement - shudder the island
+                                s.shuddered_island = Some(currently_selected);
+                                s.selected = None;
+                            }
                         }
                     } else {
                         // Clicking the already selected island toggles it off
@@ -489,8 +319,10 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
         })
     };
 
-    let width = state.grid.width * 100;
-    let height = state.grid.height * 100;
+    console::log_1(&JsValue::from_str("1!"));
+
+    let width = state.grid.width as i32 * 100;
+    let height = state.grid.height as i32 * 100;
 
     html! {
         <div class="game-container">
@@ -515,7 +347,7 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
             </svg>
 
             { if is_complete {
-                html! { <VictoryOverlay next_width={state.grid.width as u8} next_height={state.grid.height as u8} /> }
+                html! { <VictoryOverlay next_width={state.grid.width} next_height={state.grid.height} /> }
             } else {
                 html! {}
             }}
@@ -578,14 +410,25 @@ fn victory_overlay(props: &VictoryOverlayProps) -> Html {
     }
 }
 
-fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<u32>) -> Html {
+fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<Position>) -> Html {
     state
         .grid
         .islands
         .iter()
-        .map(|i| {
-            let complete = state.bridges_for(i.id) == i.required;
-            let selected = state.selected == Some(i.id);
+        .map(|(position, island)| {
+            let terminating_bridges = state
+                .grid
+                .bridges
+                .iter()
+                .filter(|(BridgeLine { start, end, .. }, _)| start == position || end == position)
+                .map(|(_, bridge_type)| match bridge_type {
+                    hashi::BridgeType::Single => 1,
+                    hashi::BridgeType::Double => 2,
+                })
+                .sum::<u8>();
+
+            let complete = terminating_bridges == island.required_bridges;
+            let selected = state.selected == Some(position.to_owned());
 
             let fill = if complete { "#8BC34A" } else { "#FFFFFF" };
             let stroke = if selected { "#2196F3" } else { "#000000" };
@@ -594,12 +437,12 @@ fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<u32>) -> Html 
 
             let onclick = {
                 let cb = cb.clone();
-                let id = i.id;
-                Callback::from(move |_| cb.emit(id))
+                let pos = position.to_owned();
+                Callback::from(move |_| cb.emit(pos))
             };
 
             let filter = if selected { "url(#selectedGlow)" } else { "" };
-            let shudder_class = if state.shuddered_island == Some(i.id) {
+            let shudder_class = if state.shuddered_island == Some(position.to_owned()) {
                 "shudder"
             } else {
                 ""
@@ -608,14 +451,14 @@ fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<u32>) -> Html 
             html! {
                 <g onclick={onclick} style="cursor:pointer;" class={shudder_class}>
                     <circle
-                        cx={(i.x * 100).to_string()}
-                        cy={(i.y * 100).to_string()}
+                        cx={(position.x as i32 * 100).to_string()}
+                        cy={(position.y as i32 * 100).to_string()}
                         r={50}
                         fill="transparent"
                     />
                     <circle
-                        cx={(i.x * 100).to_string()}
-                        cy={(i.y * 100).to_string()}
+                        cx={(position.x as i32 * 100).to_string()}
+                        cy={(position.y as i32 * 100).to_string()}
                         r={radius.to_string()}
                         fill={fill}
                         stroke={stroke}
@@ -623,14 +466,14 @@ fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<u32>) -> Html 
                         filter={filter}
                     />
                     <text
-                        x={(i.x * 100).to_string()}
-                        y={(i.y * 100 + 7).to_string()}
+                        x={(position.x as i32 * 100).to_string()}
+                        y={(position.y as i32 * 100 + 7).to_string()}
                         text-anchor="middle"
                         font-size="20"
                         font-family="sans-serif"
                         pointer-events="none"
                     >
-                        { i.required.to_string() }
+                        { island.required_bridges.to_string() }
                     </text>
                 </g>
             }
@@ -639,60 +482,50 @@ fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<u32>) -> Html 
 }
 
 fn render_bridges(state: &UseStateHandle<GameState>) -> Html {
+    console::log_1(&JsValue::from_str("render_bridges!"));
     state
+        .grid
         .bridges
         .iter()
-        .flat_map(|((a, b), count)| {
-            let ia = state.island(*a);
-            let ib = state.island(*b);
-
-            // Determine if horizontal or vertical
-            let horizontal = ia.y == ib.y;
-            let vertical = ia.x == ib.x;
-
+        .flat_map(|(bridge_line, bridge_type)| {
             // offsets for single vs double
-            let offsets: Vec<i32> = if *count == 1 {
-                vec![0] // single line, no offset
-            } else {
-                vec![-5, 5] // double line, 5px apart
+            let offsets: Vec<i32> = match bridge_type {
+                hashi::BridgeType::Single => vec![0], // single line, no offset
+                hashi::BridgeType::Double => vec![-5, 5], // double line, 5px apart
             };
 
             offsets.into_iter().map(move |offset: i32| {
-                let (x1, y1, x2, y2) = if horizontal {
-                    // horizontal → offset dy
-                    (
-                        ia.x * 100,
-                        (ia.y * 100) + offset,
-                        ib.x * 100,
-                        (ib.y * 100) + offset,
-                    )
-                } else if vertical {
-                    // vertical → offset dx
-                    (
-                        (ia.x * 100) + offset,
-                        ia.y * 100,
-                        (ib.x * 100) + offset,
-                        ib.y * 100,
-                    )
-                } else {
-                    // fallback diagonal (shouldn't happen)
-                    println!(
-                        "Warning: diagonal bridge detected between islands {} and {}",
-                        a, b
-                    );
-                    (ia.x * 100, ia.y * 100, ib.x * 100, ib.y * 100)
+                let (x1, y1, x2, y2) = match bridge_line.direction {
+                    hashi::BridgeDirection::Right => (
+                        (bridge_line.start.x as i32 * 100),
+                        (bridge_line.start.y as i32 * 100) + offset,
+                        (bridge_line.end.x as i32 * 100),
+                        (bridge_line.end.y as i32 * 100) + offset,
+                    ),
+                    hashi::BridgeDirection::Down => (
+                        (bridge_line.start.x as i32 * 100) + offset,
+                        (bridge_line.start.y as i32 * 100),
+                        (bridge_line.end.x as i32 * 100) + offset,
+                        (bridge_line.end.y as i32 * 100),
+                    ),
                 };
 
                 // clone state for click
                 let state = state.clone();
-                let key = (a.min(b).to_owned(), a.max(b).to_owned());
+                let key = bridge_line.to_owned();
                 let onclick = Callback::from(move |_| {
                     let mut s = (*state).clone();
-                    if let Some(c) = s.bridges.get_mut(&key) {
-                        if *c > 1 {
-                            *c -= 1; // double → single
-                        } else {
-                            s.bridges.remove(&key); // single → remove
+
+                    if let Some(existing_bridge_type) = s.grid.bridges.get(&key) {
+                        match existing_bridge_type {
+                            hashi::BridgeType::Double => {
+                                // Remove one bridge (double -> single)
+                                s.grid.bridges.insert(key, hashi::BridgeType::Single);
+                            }
+                            hashi::BridgeType::Single => {
+                                // Remove the bridge entirely
+                                s.grid.bridges.remove(&key);
+                            }
                         }
                     }
                     state.set(s);

@@ -35,26 +35,26 @@ pub struct Position {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
-enum BridgeType {
+pub enum BridgeType {
     Single,
     Double,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
-enum BridgeDirection {
+pub enum BridgeDirection {
     Down,
     Right,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct BridgeLine {
-    start: Position,
-    end: Position,
-    direction: BridgeDirection,
+    pub start: Position,
+    pub end: Position,
+    pub direction: BridgeDirection,
 }
 
 impl BridgeLine {
-    fn new(start: Position, end: Position) -> Result<Self, HashiError> {
+    pub fn new(start: Position, end: Position) -> Result<Self, HashiError> {
         if start.x != end.x && start.y != end.y {
             return Err(HashiError::DiagonalBridge);
         }
@@ -175,11 +175,19 @@ pub struct HashiGrid {
     pub width: u8,
     pub height: u8,
     pub islands: BTreeMap<Position, Island>,
-    bridges: BTreeMap<BridgeLine, BridgeType>,
+    pub bridges: BTreeMap<BridgeLine, BridgeType>,
 }
 
 impl HashiGrid {
-    fn new(width: u8, height: u8) -> Result<Self, HashiError> {
+    pub fn placeholder() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            islands: BTreeMap::new(),
+            bridges: BTreeMap::new(),
+        }
+    }
+    pub fn new(width: u8, height: u8) -> Result<Self, HashiError> {
         if width == 0 || height == 0 {
             return Err(HashiError::Size);
         }
@@ -509,10 +517,43 @@ impl HashiGrid {
         Ok(BridgeType::Single)
     }
 
-    fn add_bridge(&mut self, bridge: BridgeLine) -> Result<BridgeType, HashiError> {
+    pub fn add_bridge(&mut self, bridge: BridgeLine) -> Result<BridgeType, HashiError> {
         let suitable_bridge_type = self.can_bridge(bridge)?;
         self.bridges.insert(bridge, suitable_bridge_type);
         Ok(suitable_bridge_type)
+    }
+
+    pub fn wipe_bridges(mut self) -> Self {
+        self.bridges.clear();
+        self
+    }
+
+    pub fn is_complete(&self) -> bool {
+        // No island should have no bridges, at this point. If it does, something is wrong and we should errror.
+        for island in self.islands.values() {
+            if island.required_bridges == 0 {
+                return false;
+            }
+        }
+
+        // Run through each bridge and check that it has the correct number of connections
+        for (island_pos, island) in &self.islands {
+            let mut bridge_count = 0;
+            for (bridge_line, bridge_type) in &self.bridges {
+                if bridge_line.start == *island_pos || bridge_line.end == *island_pos {
+                    match bridge_type {
+                        BridgeType::Single => bridge_count += 1,
+                        BridgeType::Double => bridge_count += 2,
+                    }
+                }
+            }
+
+            if bridge_count != island.required_bridges {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
