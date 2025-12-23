@@ -459,71 +459,67 @@ Game Rendering
 ======================= */
 
 fn render_game(state: &UseStateHandle<GameState>) -> Html {
-    if state.grid.islands.is_empty() {
-        html! { <p class="loading">{"Loading puzzle..."}</p> }
-    } else {
-        let is_complete = state.is_complete();
+    let is_complete = state.is_complete();
 
-        let on_island_click = {
-            let state = state.clone();
-            Callback::from(move |id: u32| {
-                let mut s = (*state).clone();
+    let on_island_click = {
+        let state = state.clone();
+        Callback::from(move |id: u32| {
+            let mut s = (*state).clone();
 
-                match s.selected {
-                    None => s.selected = Some(id),
-                    Some(prev) => {
-                        if prev != id {
-                            if s.can_add_bridge(prev, id) {
-                                let key = (prev.min(id), prev.max(id));
-                                *s.bridges.entry(key).or_insert(0) += 1;
-                                s.selected = None;
-                            } else {
-                                s.shuddered_island = Some(id);
-                                s.selected = None;
-                            }
+            match s.selected {
+                None => s.selected = Some(id),
+                Some(prev) => {
+                    if prev != id {
+                        if s.can_add_bridge(prev, id) {
+                            let key = (prev.min(id), prev.max(id));
+                            *s.bridges.entry(key).or_insert(0) += 1;
+                            s.selected = None;
                         } else {
-                            // Clicking the already selected island toggles it off
+                            s.shuddered_island = Some(id);
                             s.selected = None;
                         }
+                    } else {
+                        // Clicking the already selected island toggles it off
+                        s.selected = None;
                     }
                 }
+            }
 
-                state.set(s);
-            })
-        };
+            state.set(s);
+        })
+    };
 
-        let width = state.grid.width * 100;
-        let height = state.grid.height * 100;
+    let width = state.grid.width * 100;
+    let height = state.grid.height * 100;
 
-        html! {
-            <div class="game-container">
-                <svg
-                    viewBox={format!("-100 -100 {} {}", width + 100, height + 100)}
-                    preserveAspectRatio="xMidYMid meet"
-                    class="game-svg"
-                >
-                    <defs>
-                        <filter id="selectedGlow">
-                            <feDropShadow
-                                dx="0"
-                                dy="0"
-                                stdDeviation="5"
-                                flood-color="#2196F3"
-                                flood-opacity="0.7"
-                            />
-                        </filter>
-                    </defs>
-                    { render_bridges(state) }
-                    { render_islands(state, on_island_click) }
-                </svg>
+    html! {
+        <div class="game-container">
+            <svg
+                viewBox={format!("-100 -100 {} {}", width + 100, height + 100)}
+                preserveAspectRatio="xMidYMid meet"
+                class="game-svg"
+            >
+                <defs>
+                    <filter id="selectedGlow">
+                        <feDropShadow
+                            dx="0"
+                            dy="0"
+                            stdDeviation="5"
+                            flood-color="#2196F3"
+                            flood-opacity="0.7"
+                        />
+                    </filter>
+                </defs>
+                { render_bridges(state) }
+                { render_islands(state, on_island_click) }
+            </svg>
 
-                { if is_complete {
-                    html! { <VictoryOverlay next_width={state.grid.width as u8} next_height={state.grid.height as u8} /> }
-                } else {
-                    html! {}
-                }}
-            </div>
-        }
+            { if is_complete {
+                html! { <VictoryOverlay next_width={state.grid.width as u8} next_height={state.grid.height as u8} /> }
+            } else {
+                html! {}
+            }}
+        </div>
     }
 }
 
