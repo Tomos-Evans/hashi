@@ -291,7 +291,18 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                                     // Invalid bridge (diagonal)
                                     s.shuddered_island = Some(currently_selected);
                                     s.selected = None;
-                                    state.set(s);
+                                    state.set(s.clone());
+
+                                    // Clear shudder after 300ms
+                                    let state_for_timeout = state.clone();
+                                    gloo_timers::callback::Timeout::new(300, move || {
+                                        let mut s = (*state_for_timeout).clone();
+                                        s.shuddered_island = None;
+                                        s.selected = None;
+                                        state_for_timeout.set(s);
+                                    })
+                                    .forget();
+
                                     return;
                                 }
                                 Ok(b) => b,
@@ -306,6 +317,18 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
                                 // Invalid bridge placement - shudder the island
                                 s.shuddered_island = Some(currently_selected);
                                 s.selected = None;
+
+                                state.set(s.clone());
+
+                                // Clear shudder after 300ms
+                                let state_for_timeout = state.clone();
+                                gloo_timers::callback::Timeout::new(300, move || {
+                                    let mut s = (*state_for_timeout).clone();
+                                    s.shuddered_island = None;
+                                    s.selected = None;
+                                    state_for_timeout.set(s);
+                                })
+                                .forget();
                             }
                         }
                     } else {

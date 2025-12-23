@@ -367,6 +367,7 @@ dependencies = [
  "anyhow",
  "getrandom 0.3.4",
  "gloo",
+ "gloo-timers",
  "rand",
  "serde",
  "serde_json",
