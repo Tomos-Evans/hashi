@@ -255,55 +255,19 @@ fn home() -> Html {
     };
 
     html! {
-        <div style="max-width: 600px; margin: 50px auto; padding: 20px; font-family: sans-serif;">
-            <h1 style="text-align: center; color: #333;">{"Hashi Puzzle Game"}</h1>
-            <p style="text-align: center; color: #666; margin-bottom: 40px;">
+        <div class="home-container">
+            <h1 class="home-title">{"Hashi Puzzle Game"}</h1>
+            <p class="home-subtitle">
                 {"Connect the islands with bridges following the puzzle rules"}
             </p>
-            <div style="display: flex; flex-direction: column; gap: 20px; align-items: center;">
-                <button
-                    onclick={on_new_game_5x10}
-                    style="
-                        padding: 15px 40px;
-                        font-size: 18px;
-                        background: #2196F3;
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                        cursor: pointer;
-                        min-width: 200px;
-                    "
-                >
+            <div class="home-buttons">
+                <button onclick={on_new_game_5x10} class="btn btn-primary">
                     {"5x10"}
                 </button>
-                <button
-                    onclick={on_new_game_8x16}
-                    style="
-                        padding: 15px 40px;
-                        font-size: 18px;
-                        background: #2196F3;
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                        cursor: pointer;
-                        min-width: 200px;
-                    "
-                >
+                <button onclick={on_new_game_8x16} class="btn btn-primary">
                     {"8x16"}
                 </button>
-                <button
-                    onclick={on_rules}
-                    style="
-                        padding: 15px 40px;
-                        font-size: 18px;
-                        background: #8BC34A;
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                        cursor: pointer;
-                        min-width: 200px;
-                    "
-                >
+                <button onclick={on_rules} class="btn btn-success">
                     {"View Rules"}
                 </button>
             </div>
@@ -322,9 +286,9 @@ fn rules() -> Html {
     };
 
     html! {
-        <div style="max-width: 800px; margin: 30px auto; padding: 20px; font-family: sans-serif;">
+        <div class="rules-container">
             <h1>{"Hashi Rules"}</h1>
-            <div style="line-height: 1.8; color: #333;">
+            <div class="rules-content">
                 <h2>{"Objective"}</h2>
                 <p>{"Connect all islands with bridges according to the numbers on each island."}</p>
 
@@ -348,19 +312,7 @@ fn rules() -> Html {
                 </ul>
             </div>
 
-            <button
-                onclick={on_back}
-                style="
-                    margin-top: 30px;
-                    padding: 10px 30px;
-                    font-size: 16px;
-                    background: #2196F3;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    cursor: pointer;
-                "
-            >
+            <button onclick={on_back} class="btn btn-back">
                 {"Back to Home"}
             </button>
         </div>
@@ -437,39 +389,11 @@ fn game(props: &GameProps) -> Html {
 
     html! {
         <div>
-            <div style="padding: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-                <button
-                    onclick={on_back}
-                    style="
-                        padding: 24px 38px;
-                        font-size: 24px;
-                        background: #2196F3;
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                        cursor: pointer;
-                        font-weight: 500;
-                        min-height: 80px;
-                        touch-action: manipulation;
-                    "
-                >
+            <div class="game-controls">
+                <button onclick={on_back} class="btn btn-game-large">
                     {"← Back to Home"}
                 </button>
-                <button
-                    onclick={on_new_puzzle}
-                    style="
-                        padding: 24px 38px;
-                        font-size: 24px;
-                        background: #8BC34A;
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                        cursor: pointer;
-                        font-weight: 500;
-                        min-height: 80px;
-                        touch-action: manipulation;
-                    "
-                >
+                <button onclick={on_new_puzzle} class="btn btn-game-large success">
                     {"🎲 New Random Puzzle"}
                 </button>
             </div>
@@ -499,19 +423,7 @@ fn not_found() -> Html {
         <div style="text-align: center; padding: 50px; font-family: sans-serif;">
             <h1>{"404 - Page Not Found"}</h1>
             <p>{"The page you're looking for doesn't exist."}</p>
-            <button
-                onclick={on_home}
-                style="
-                    margin-top: 20px;
-                    padding: 10px 30px;
-                    font-size: 16px;
-                    background: #2196F3;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    cursor: pointer;
-                "
-            >
+            <button onclick={on_home} class="btn btn-back">
                 {"Go Home"}
             </button>
         </div>
@@ -548,7 +460,7 @@ Game Rendering
 
 fn render_game(state: &UseStateHandle<GameState>) -> Html {
     if state.grid.islands.is_empty() {
-        html! { <p style="text-align: center; padding: 50px;">{"Loading puzzle..."}</p> }
+        html! { <p class="loading">{"Loading puzzle..."}</p> }
     } else {
         let is_complete = state.is_complete();
 
@@ -584,53 +496,14 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
             <>
                 <style>
                     {r#"
-                        @keyframes shudder {
-                            0%   { transform: translateX(0); }
-                            20%  { transform: translateX(-5px); }
-                            40%  { transform: translateX(5px); }
-                            60%  { transform: translateX(-5px); }
-                            80%  { transform: translateX(5px); }
-                            100% { transform: translateX(0); }
-                        }
-
-                        .shudder {
-                            animation: shudder 0.3s ease;
-                        }
-
-                        @keyframes fadeIn {
-                            from { opacity: 0; transform: scale(0.8); }
-                            to { opacity: 1; transform: scale(1); }
-                        }
-
-                        .victory-overlay {
-                            animation: fadeIn 0.5s ease-out;
-                        }
-
-                        @keyframes bounce {
-                            0%, 100% { transform: translateY(0); }
-                            50% { transform: translateY(-10px); }
-                        }
-
-                        .victory-emoji {
-                            animation: bounce 1s ease-in-out infinite;
-                        }
+                        #selectedGlow { }
                     "#}  
                 </style>
-                <div style="width:100vw; overflow:auto; position: relative;">
+                <div class="game-container">
                     <svg
                         viewBox={format!("-100 -100 {} {}", width + 100, height + 100)}
                         preserveAspectRatio="xMidYMid meet"
-                        style="
-                            width: 100%;
-                            height: auto;
-                            aspect-ratio: {};
-                            display: block;
-                            background: #f5f5f5;
-                            touch-action: manipulation;
-                            user-select: none;
-                            -webkit-user-select: none;
-                            -webkit-tap-highlight-color: transparent;
-                        "
+                        class="game-svg"
                     >
                         <defs>
                             <filter id="selectedGlow">
@@ -689,80 +562,22 @@ fn victory_overlay(props: &VictoryOverlayProps) -> Html {
     };
 
     html! {
-        <div
-            class="victory-overlay"
-            style="
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.4);
-                backdrop-filter: blur(3px);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 1000;
-            "
-        >
-            <div style="
-                background: white;
-                padding: 40px;
-                border-radius: 20px;
-                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-                text-align: center;
-                max-width: 400px;
-                margin: 20px;
-            ">
-                <div class="victory-emoji" style="font-size: 80px; margin-bottom: 20px;">
+        <div class="victory-overlay-background victory-overlay">
+            <div class="victory-modal">
+                <div class="victory-emoji">
                     {"🎉"}
                 </div>
-                <h2 style="
-                    color: #8BC34A;
-                    font-size: 32px;
-                    margin: 0 0 10px 0;
-                    font-family: sans-serif;
-                ">
+                <h2 class="victory-title">
                     {"Puzzle Complete!"}
                 </h2>
-                <p style="
-                    color: #666;
-                    font-size: 16px;
-                    margin: 0 0 30px 0;
-                    font-family: sans-serif;
-                ">
+                <p class="victory-message">
                     {"Congratulations! All islands are connected."}
                 </p>
-                <div style="display: flex; flex-direction: column; gap: 15px;">
-                    <button
-                        onclick={on_new_puzzle}
-                        style="
-                            padding: 15px 30px;
-                            font-size: 18px;
-                            background: #8BC34A;
-                            color: white;
-                            border: none;
-                            border-radius: 10px;
-                            cursor: pointer;
-                            font-weight: bold;
-                            transition: background 0.2s;
-                        "
-                    >
+                <div class="victory-buttons">
+                    <button onclick={on_new_puzzle} class="btn btn-victory">
                         {"🎲 Next Puzzle"}
                     </button>
-                    <button
-                        onclick={on_home}
-                        style="
-                            padding: 12px 30px;
-                            font-size: 16px;
-                            background: #2196F3;
-                            color: white;
-                            border: none;
-                            border-radius: 10px;
-                            cursor: pointer;
-                            transition: background 0.2s;
-                        "
-                    >
+                    <button onclick={on_home} class="btn btn-victory-secondary">
                         {"🏠 Home"}
                     </button>
                 </div>
