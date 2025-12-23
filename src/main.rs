@@ -391,10 +391,10 @@ fn game(props: &GameProps) -> Html {
         <div>
             <div class="game-controls">
                 <button onclick={on_back} class="btn btn-game-large">
-                    {"← Back to Home"}
+                    {"← Back"}
                 </button>
                 <button onclick={on_new_puzzle} class="btn btn-game-large success">
-                    {"🎲 New Random Puzzle"}
+                    {"🎲 New"}
                 </button>
             </div>
             { render_game(&state) }
