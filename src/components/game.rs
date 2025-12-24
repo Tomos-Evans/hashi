@@ -2,7 +2,6 @@ use crate::{Route, hashi};
 use yew::prelude::*;
 use yew_hooks::use_interval;
 use yew_router::prelude::*;
-
 use crate::hashi::{BridgeLine, HashiGrid, Position};
 use web_sys::console;
 use web_sys::wasm_bindgen::JsValue;
@@ -13,6 +12,7 @@ struct GameState {
     selected: Option<Position>,
     shuddered_island: Option<Position>,
     time_elapsed: u32,
+    challenge_time: Option<u32>,
 }
 
 impl Default for GameState {
@@ -22,6 +22,7 @@ impl Default for GameState {
             selected: None,
             shuddered_island: None,
             time_elapsed: 0,
+            challenge_time: None,
         }
     }
 }
@@ -40,6 +41,7 @@ pub fn game(props: &GameProps) -> Html {
     let puzzle_id = props.puzzle_id;
     let width = props.width;
     let height = props.height;
+    let challenge_time = None; // TODO: pass this from URL when implemented
 
     {
         let state = state.clone();
@@ -55,6 +57,7 @@ pub fn game(props: &GameProps) -> Html {
                     selected: None,
                     shuddered_island: None,
                     time_elapsed: 0,
+                    challenge_time,
                 });
             }
             || ()
@@ -103,9 +106,31 @@ pub fn game(props: &GameProps) -> Html {
                 <button onclick={on_new_puzzle} class="btn btn-game-large success">
                     {"🎲 Next"}
                 </button>
-                <div class="game-timer">
-                    {format!("Time: {}", format_time(state.time_elapsed))}
+                <div class="game-timer-container">
+                    { 
+                        if let Some(ct) = challenge_time {
+                            let is_beating = state.time_elapsed < ct;
+                            let color_class = if is_beating { "beating" } else { "not-beating" };
+                            html! {
+                                <>
+                                    <div class="challenge-time">
+                                        {format!("Time to beat: {}", format_time(ct))}
+                                    </div>
+                                    <div class={format!("game-timer {}", color_class)}>
+                                        {format!("Time: {}", format_time(state.time_elapsed))}
+                                    </div>
+                                </>
+                            }
+                        } else {
+                            html! {
+                                <div class="game-timer">
+                                    {format!("Time: {}", format_time(state.time_elapsed))}
+                                </div>
+                            }
+                        }
+                    }
                 </div>
+                
             </div>
             { render_game(&state) }
         </div>
@@ -218,7 +243,7 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
             </svg>
 
             { if is_complete {
-                html! { <VictoryOverlay next_width={state.grid.width} next_height={state.grid.height} elapsed_seconds={state.time_elapsed} /> }
+                html! { <VictoryOverlay next_width={state.grid.width} next_height={state.grid.height} elapsed_seconds={state.time_elapsed} challenge_time={state.challenge_time} /> }
             } else {
                 html! {}
             }}
@@ -231,6 +256,7 @@ struct VictoryOverlayProps {
     next_width: u8,
     next_height: u8,
     elapsed_seconds: u32,
+    challenge_time: Option<u32>,
 }
 
 #[function_component(VictoryOverlay)]
@@ -272,6 +298,21 @@ fn victory_overlay(props: &VictoryOverlayProps) -> Html {
                 <div class="victory-time">
                     {"Time: "}{ format_time(props.elapsed_seconds) }
                 </div>
+                { if let Some(ct) = props.challenge_time {
+                    let is_beating = props.elapsed_seconds < ct;
+                    let message = if is_beating {
+                        "🏆 You beat the challenge!"
+                    } else {
+                        "Time to beat was"
+                    };
+                    html! {
+                        <div class={if is_beating { "victory-challenge-beating" } else { "victory-challenge-missed" }}>
+                            { message }{ " " }{ format_time(ct) }
+                        </div>
+                    }
+                } else {
+                    html! {}
+                }}
                 <div class="victory-buttons">
                     <button onclick={on_new_puzzle} class="btn btn-victory">
                         {"🎲 Next Puzzle"}

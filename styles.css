@@ -253,6 +253,37 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
+.game-timer-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.challenge-time {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    color: #666;
+}
+
+.game-timer {
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+    padding: 0 10px;
+    min-width: 60px;
+    text-align: center;
+}
+
+.game-timer.beating {
+    color: #8BC34A;
+}
+
+.game-timer.not-beating {
+    color: #f44336;
+}
+
 /* ==================== Victory Overlay ==================== */
 
 .victory-overlay-background {
@@ -304,6 +335,27 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+.victory-time {
+    font-family: 'Courier New', monospace;
+    font-size: 20px;
+    font-weight: bold;
+    color: #2196F3;
+    margin: 0 0 15px 0;
+}
+
+.victory-challenge-beating {
+    font-size: 16px;
+    color: #8BC34A;
+    font-weight: bold;
+    margin: 0 0 20px 0;
+}
+
+.victory-challenge-missed {
+    font-size: 16px;
+    color: #f44336;
+    margin: 0 0 20px 0;
 }
 
 /* ==================== Loading State ==================== */
@@ -404,5 +456,14 @@ body {
     .btn-victory-secondary {
         padding: 14px 30px;
         font-size: 16px;
+    }
+
+    .challenge-time {
+        font-size: 16px;
+    }
+
+    .game-timer {
+        font-size: 24px;
+        min-width: 80px;
     }
 }
