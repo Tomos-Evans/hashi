@@ -88,6 +88,7 @@ body {
     justify-content: center;
     transition: background 0.2s;
     -webkit-appearance: none;
+    appearance: none;
 }
 
 .btn:active {

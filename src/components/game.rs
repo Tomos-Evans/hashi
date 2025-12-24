@@ -1,5 +1,6 @@
 use crate::{Route, hashi};
 use yew::prelude::*;
+use yew_hooks::use_interval;
 use yew_router::prelude::*;
 
 use crate::hashi::{BridgeLine, HashiGrid, Position};
@@ -11,6 +12,7 @@ struct GameState {
     grid: HashiGrid,
     selected: Option<Position>,
     shuddered_island: Option<Position>,
+    time_elapsed: u32,
 }
 
 impl Default for GameState {
@@ -19,6 +21,7 @@ impl Default for GameState {
             grid: HashiGrid::placeholder(),
             selected: None,
             shuddered_island: None,
+            time_elapsed: 0,
         }
     }
 }
@@ -37,6 +40,7 @@ pub fn game(props: &GameProps) -> Html {
     let puzzle_id = props.puzzle_id;
     let width = props.width;
     let height = props.height;
+
     {
         let state = state.clone();
 
@@ -50,10 +54,26 @@ pub fn game(props: &GameProps) -> Html {
                     grid: hashi_grid,
                     selected: None,
                     shuddered_island: None,
+                    time_elapsed: 0,
                 });
             }
             || ()
         });
+    }
+
+    // Timer using yew_hooks
+    {
+        let state = state.clone();
+        use_interval(
+            move || {
+                let mut s = (*state).clone();
+                if !s.grid.is_complete() {
+                    s.time_elapsed += 1;
+                    state.set(s);
+                }
+            },
+            1000,
+        );
     }
 
     let on_back = {
@@ -81,8 +101,11 @@ pub fn game(props: &GameProps) -> Html {
                     {"← Back"}
                 </button>
                 <button onclick={on_new_puzzle} class="btn btn-game-large success">
-                    {"🎲 New"}
+                    {"🎲 Next"}
                 </button>
+                <div class="game-timer">
+                    {format!("Time: {}", format_time(state.time_elapsed))}
+                </div>
             </div>
             { render_game(&state) }
         </div>
@@ -195,7 +218,7 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
             </svg>
 
             { if is_complete {
-                html! { <VictoryOverlay next_width={state.grid.width} next_height={state.grid.height} /> }
+                html! { <VictoryOverlay next_width={state.grid.width} next_height={state.grid.height} elapsed_seconds={state.time_elapsed} /> }
             } else {
                 html! {}
             }}
@@ -207,6 +230,7 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
 struct VictoryOverlayProps {
     next_width: u8,
     next_height: u8,
+    elapsed_seconds: u32,
 }
 
 #[function_component(VictoryOverlay)]
@@ -245,6 +269,9 @@ fn victory_overlay(props: &VictoryOverlayProps) -> Html {
                 <p class="victory-message">
                     {"Congratulations! All islands are connected."}
                 </p>
+                <div class="victory-time">
+                    {"Time: "}{ format_time(props.elapsed_seconds) }
+                </div>
                 <div class="victory-buttons">
                     <button onclick={on_new_puzzle} class="btn btn-victory">
                         {"🎲 Next Puzzle"}
@@ -406,4 +433,10 @@ fn render_bridges(state: &UseStateHandle<GameState>) -> Html {
             })
         })
         .collect()
+}
+
+fn format_time(seconds: u32) -> String {
+    let mins = seconds / 60;
+    let secs = seconds % 60;
+    format!("{:02}:{:02}", mins, secs)
 }
