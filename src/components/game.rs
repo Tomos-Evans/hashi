@@ -1,8 +1,8 @@
+use crate::hashi::{BridgeLine, HashiGrid, Position};
 use crate::{Route, hashi};
 use yew::prelude::*;
 use yew_hooks::use_interval;
 use yew_router::prelude::*;
-use crate::hashi::{BridgeLine, HashiGrid, Position};
 // use web_sys::console;
 // use web_sys::wasm_bindgen::JsValue;
 // console::log_1(&JsValue::from_str("game.rs loaded"));
@@ -108,7 +108,7 @@ pub fn game(props: &GameProps) -> Html {
                     {"🎲 Next"}
                 </button>
                 <div class="game-timer-container">
-                    { 
+                    {
                         if let Some(ct) = challenge_time {
                             let is_beating = state.time_elapsed < ct;
                             let color_class = if is_beating { "beating" } else { "not-beating" };
@@ -131,7 +131,6 @@ pub fn game(props: &GameProps) -> Html {
                         }
                     }
                 </div>
-                
             </div>
             { render_game(&state) }
         </div>
@@ -215,7 +214,6 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
             state.set(s);
         })
     };
-
 
     let width = state.grid.width as i32 * 100;
     let height = state.grid.height as i32 * 100;
