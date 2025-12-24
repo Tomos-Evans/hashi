@@ -3,8 +3,9 @@ use yew::prelude::*;
 use yew_hooks::use_interval;
 use yew_router::prelude::*;
 use crate::hashi::{BridgeLine, HashiGrid, Position};
-use web_sys::console;
-use web_sys::wasm_bindgen::JsValue;
+// use web_sys::console;
+// use web_sys::wasm_bindgen::JsValue;
+// console::log_1(&JsValue::from_str("game.rs loaded"));
 
 #[derive(Clone)]
 struct GameState {
@@ -215,7 +216,6 @@ fn render_game(state: &UseStateHandle<GameState>) -> Html {
         })
     };
 
-    console::log_1(&JsValue::from_str("1!"));
 
     let width = state.grid.width as i32 * 100;
     let height = state.grid.height as i32 * 100;
@@ -398,7 +398,6 @@ fn render_islands(state: &UseStateHandle<GameState>, cb: Callback<Position>) -> 
 }
 
 fn render_bridges(state: &UseStateHandle<GameState>) -> Html {
-    console::log_1(&JsValue::from_str("render_bridges!"));
     state
         .grid
         .bridges
