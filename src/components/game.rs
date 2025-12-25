@@ -1,5 +1,6 @@
 use crate::hashi::{BridgeLine, HashiGrid, Position};
 use crate::{Route, hashi};
+use serde::Deserialize;
 use yew::prelude::*;
 use yew_hooks::use_interval;
 use yew_router::prelude::*;
@@ -35,6 +36,11 @@ pub struct GameProps {
     pub height: u8,
 }
 
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+struct QueryParams {
+    challenge_time: Option<u32>,
+}
+
 #[function_component(Game)]
 pub fn game(props: &GameProps) -> Html {
     let state: UseStateHandle<GameState> = use_state(GameState::default);
@@ -42,7 +48,17 @@ pub fn game(props: &GameProps) -> Html {
     let puzzle_id = props.puzzle_id;
     let width = props.width;
     let height = props.height;
-    let challenge_time = None; // TODO: pass this from URL when implemented
+    let query_params = match use_location() {
+        Some(loc) => match loc.query::<QueryParams>() {
+            Ok(params) => params,
+            Err(_) => QueryParams {
+                challenge_time: None,
+            },
+        },
+        None => QueryParams {
+            challenge_time: None,
+        },
+    };
 
     {
         let state = state.clone();
@@ -58,7 +74,7 @@ pub fn game(props: &GameProps) -> Html {
                     selected: None,
                     shuddered_island: None,
                     time_elapsed: 0,
-                    challenge_time,
+                    challenge_time: query_params.challenge_time,
                 });
             }
             || ()
@@ -109,7 +125,7 @@ pub fn game(props: &GameProps) -> Html {
                 </button>
                 <div class="game-timer-container">
                     {
-                        if let Some(ct) = challenge_time {
+                        if let Some(ct) = state.challenge_time {
                             let is_beating = state.time_elapsed < ct;
                             let color_class = if is_beating { "beating" } else { "not-beating" };
                             html! {
