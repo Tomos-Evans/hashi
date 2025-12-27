@@ -460,12 +460,34 @@ impl HashiGrid {
         Ok(())
     }
 
-    fn can_bridge(&self, bridge: BridgeLine) -> Result<BridgeType, HashiError> {
-        // If the bridge already exists and its a single, then its already been validated. Allow double
-        if let Some(BridgeType::Single) = self.bridges.get(&bridge) {
-            return Ok(BridgeType::Double);
+    fn count_brdges_ending_at(&self, position: Position) -> u8 {
+        let mut count = 0;
+
+        for (bridge_line, bridge_type) in self.bridges_ending_at(position) {
+            if bridge_line.start == position || bridge_line.end == position {
+                match bridge_type {
+                    BridgeType::Single => count += 1,
+                    BridgeType::Double => count += 2,
+                }
+            }
         }
 
+        count
+    }
+
+    fn bridges_ending_at(&self, position: Position) -> Vec<(&BridgeLine, &BridgeType)> {
+        let mut result = Vec::new();
+
+        for (bridge_line, bridge_type) in &self.bridges {
+            if bridge_line.start == position || bridge_line.end == position {
+                result.push((bridge_line, bridge_type));
+            }
+        }
+
+        result
+    }
+
+    fn can_bridge(&self, bridge: BridgeLine) -> Result<BridgeType, HashiError> {
         match self.bridges.get(&bridge) {
             Some(BridgeType::Double) => {
                 // already a double, cannot add more
@@ -474,6 +496,17 @@ impl HashiGrid {
                 });
             }
             Some(BridgeType::Single) => {
+                // Check if the islands have capacity for another bridge
+                for end in [bridge.start, bridge.end] {
+                    let island = self.islands.get(&end).unwrap(); // safe unwrap, validated when bridge was first added
+                    let existing_bridges = self.count_brdges_ending_at(end);
+                    if island.required_bridges != 0
+                        && island.required_bridges < existing_bridges + 1
+                    {
+                        return Err(HashiError::Overwrite { position: end });
+                    }
+                }
+
                 // already a single, can upgrade to double. No need to validate it again
                 return Ok(BridgeType::Double);
             }
@@ -487,6 +520,15 @@ impl HashiGrid {
                             line: bridge,
                             position: end,
                         });
+                    }
+
+                    // Check that the islands have capacity for another bridge
+                    let island = self.islands.get(&end).unwrap(); // safe unwrap, validated when bridge was first added
+                    let existing_bridges = self.count_brdges_ending_at(end);
+                    if island.required_bridges != 0
+                        && island.required_bridges < existing_bridges + 1
+                    {
+                        return Err(HashiError::Overwrite { position: end });
                     }
                 }
 
