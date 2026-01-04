@@ -2,6 +2,9 @@ use rand::SeedableRng;
 use rand::prelude::*;
 use std::collections::BTreeMap;
 use thiserror::Error;
+// use web_sys::console;
+// use web_sys::wasm_bindgen::JsValue;
+// console::log_1(&JsValue::from_str("game.rs loaded"));
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum HashiError {
@@ -203,19 +206,39 @@ impl HashiGrid {
     pub fn generate(width: u8, height: u8) -> Result<Self, HashiError> {
         // make random number generator. Make a StdRng from the default random source
         let mut rng = rand::rng();
-        let rng = rand::rngs::StdRng::from_rng(&mut rng);
+        let mut rng = rand::rngs::StdRng::from_rng(&mut rng);
 
-        Self::_generate(width, height, rng)
+        Self::_generate(width, height, &mut rng)
     }
 
     pub fn generate_with_seed(width: u8, height: u8, seed: u64) -> Result<Self, HashiError> {
         // seed the random number generator
-        let rng = rand::rngs::StdRng::seed_from_u64(seed);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
 
-        Self::_generate(width, height, rng)
+        Self::_generate(width, height, &mut rng)
     }
 
-    fn _generate(width: u8, height: u8, mut rng: rand::rngs::StdRng) -> Result<Self, HashiError> {
+    fn _generate(width: u8, height: u8, rng: &mut rand::rngs::StdRng) -> Result<Self, HashiError> {
+        const MAX_GENERATION_ATTEMPTS: usize = 100;
+        for _attempt in 0..MAX_GENERATION_ATTEMPTS {
+            match Self::__generate(width, height, rng) {
+                Ok(grid) => {
+                    if grid.is_full() {
+                        return Ok(grid);
+                    } else {
+                        continue;
+                    }
+                }
+                Err(_e) => {
+                    continue;
+                }
+            }
+        }
+
+        Self::__generate(width, height, rng)
+    }
+
+    fn __generate(width: u8, height: u8, rng: &mut rand::rngs::StdRng) -> Result<Self, HashiError> {
         // Empty grid
         let mut grid = HashiGrid::new(width, height)?;
 
@@ -321,7 +344,7 @@ impl HashiGrid {
 
         // todo - create loops
 
-        let chance_of_loop = 0.6; // todo - change based on difficulty
+        let chance_of_loop = 0.3; // todo - change based on difficulty
         let island_positions: Vec<Position> = grid.islands.keys().copied().collect();
 
         for island_pos in island_positions {
@@ -596,6 +619,27 @@ impl HashiGrid {
         }
 
         true
+    }
+
+    /// Check that the generated islands fully cover the grid, meaning all edges have at least one island in their row/column
+    fn is_full(&self) -> bool {
+        let top_covered = (0..self.width).any(|x| self.islands.contains_key(&Position { x, y: 0 }));
+        let bottom_covered = (0..self.width).any(|x| {
+            self.islands.contains_key(&Position {
+                x,
+                y: self.height - 1,
+            })
+        });
+        let left_covered =
+            (0..self.height).any(|y| self.islands.contains_key(&Position { x: 0, y }));
+        let right_covered = (0..self.height).any(|y| {
+            self.islands.contains_key(&Position {
+                x: self.width - 1,
+                y,
+            })
+        });
+
+        top_covered && bottom_covered && left_covered && right_covered
     }
 }
 
