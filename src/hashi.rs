@@ -36,8 +36,7 @@ pub struct Position {
     pub y: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum BridgeType {
     Single,
     Double,
@@ -1519,5 +1518,119 @@ mod tests {
         let result = grid.add_bridge(vert);
         // Should fail because they intersect at (2, 2)
         assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // IS_FULL TESTS
+    // ============================================================================
+
+    #[test]
+    fn test_is_full_with_all_edges_covered() {
+        // Test: Grid with islands on all four edges should be full
+        let mut grid = HashiGrid::new(5, 5).unwrap();
+        grid.add_island(Position { x: 2, y: 0 }).unwrap(); // top edge
+        grid.add_island(Position { x: 2, y: 4 }).unwrap(); // bottom edge
+        grid.add_island(Position { x: 0, y: 2 }).unwrap(); // left edge
+        grid.add_island(Position { x: 4, y: 2 }).unwrap(); // right edge
+
+        assert!(grid.is_full());
+    }
+
+    #[test]
+    fn test_is_full_missing_top_edge() {
+        // Test: Grid missing islands on top edge should not be full
+        let mut grid = HashiGrid::new(5, 5).unwrap();
+        grid.add_island(Position { x: 2, y: 4 }).unwrap(); // bottom edge
+        grid.add_island(Position { x: 0, y: 2 }).unwrap(); // left edge
+        grid.add_island(Position { x: 4, y: 2 }).unwrap(); // right edge
+
+        assert!(!grid.is_full());
+    }
+
+    #[test]
+    fn test_is_full_missing_bottom_edge() {
+        // Test: Grid missing islands on bottom edge should not be full
+        let mut grid = HashiGrid::new(5, 5).unwrap();
+        grid.add_island(Position { x: 2, y: 0 }).unwrap(); // top edge
+        grid.add_island(Position { x: 0, y: 2 }).unwrap(); // left edge
+        grid.add_island(Position { x: 4, y: 2 }).unwrap(); // right edge
+
+        assert!(!grid.is_full());
+    }
+
+    #[test]
+    fn test_is_full_missing_left_edge() {
+        // Test: Grid missing islands on left edge should not be full
+        let mut grid = HashiGrid::new(5, 5).unwrap();
+        grid.add_island(Position { x: 2, y: 0 }).unwrap(); // top edge
+        grid.add_island(Position { x: 2, y: 4 }).unwrap(); // bottom edge
+        grid.add_island(Position { x: 4, y: 2 }).unwrap(); // right edge
+
+        assert!(!grid.is_full());
+    }
+
+    #[test]
+    fn test_is_full_missing_right_edge() {
+        // Test: Grid missing islands on right edge should not be full
+        let mut grid = HashiGrid::new(5, 5).unwrap();
+        grid.add_island(Position { x: 2, y: 0 }).unwrap(); // top edge
+        grid.add_island(Position { x: 2, y: 4 }).unwrap(); // bottom edge
+        grid.add_island(Position { x: 0, y: 2 }).unwrap(); // left edge
+
+        assert!(!grid.is_full());
+    }
+
+    #[test]
+    fn test_is_full_with_corner_islands() {
+        // Test: Grid with islands at all four corners should be full
+        let mut grid = HashiGrid::new(5, 5).unwrap();
+        grid.add_island(Position { x: 0, y: 0 }).unwrap(); // top-left
+        grid.add_island(Position { x: 4, y: 0 }).unwrap(); // top-right
+        grid.add_island(Position { x: 0, y: 4 }).unwrap(); // bottom-left
+        grid.add_island(Position { x: 4, y: 4 }).unwrap(); // bottom-right
+
+        assert!(grid.is_full());
+    }
+
+    #[test]
+    fn test_is_full_with_multiple_edge_islands() {
+        // Test: Grid with multiple islands per edge should still be full
+        let mut grid = HashiGrid::new(7, 7).unwrap();
+        grid.add_island(Position { x: 1, y: 0 }).unwrap(); // top edge
+        grid.add_island(Position { x: 5, y: 0 }).unwrap(); // top edge
+        grid.add_island(Position { x: 2, y: 6 }).unwrap(); // bottom edge
+        grid.add_island(Position { x: 4, y: 6 }).unwrap(); // bottom edge
+        grid.add_island(Position { x: 0, y: 3 }).unwrap(); // left edge
+        grid.add_island(Position { x: 6, y: 2 }).unwrap(); // right edge
+
+        assert!(grid.is_full());
+    }
+
+    #[test]
+    fn test_is_full_with_only_internal_islands() {
+        // Test: Grid with only internal islands (no edge coverage) should not be full
+        let mut grid = HashiGrid::new(5, 5).unwrap();
+        grid.add_island(Position { x: 2, y: 2 }).unwrap(); // center
+        grid.add_island(Position { x: 1, y: 1 }).unwrap(); // internal
+        grid.add_island(Position { x: 3, y: 3 }).unwrap(); // internal
+
+        assert!(!grid.is_full());
+    }
+
+    #[test]
+    fn test_is_full_empty_grid() {
+        // Test: Empty grid with no islands should not be full
+        let grid = HashiGrid::new(5, 5).unwrap();
+        assert!(!grid.is_full());
+    }
+
+    #[test]
+    fn test_is_full_small_grid() {
+        // Test: Small 2x2 grid with all edges covered
+        let mut grid = HashiGrid::new(2, 2).unwrap();
+        grid.add_island(Position { x: 0, y: 0 }).unwrap();
+        grid.add_island(Position { x: 1, y: 1 }).unwrap();
+
+        assert!(grid.is_full());
     }
 }
