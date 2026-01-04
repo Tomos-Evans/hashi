@@ -40,7 +40,7 @@ fn switch(routes: Route) -> Html {
 #[function_component(App)]
 fn app() -> Html {
     html! {
-        <BrowserRouter>
+        <BrowserRouter basename="/hashi/">
             <Switch<Route> render={switch} />
         </BrowserRouter>
     }
