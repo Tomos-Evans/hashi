@@ -66,7 +66,7 @@ pub fn game(props: &GameProps) -> Html {
         use_effect_with(puzzle_id, move |_| {
             {
                 let hashi_grid = hashi::HashiGrid::generate_with_seed(width, height, puzzle_id)
-                    .unwrap()
+                    .unwrap() // TODO: handle error properly
                     .wipe_bridges();
 
                 state.set(GameState {

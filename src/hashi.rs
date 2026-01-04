@@ -222,11 +222,24 @@ impl HashiGrid {
         for _attempt in 0..MAX_GENERATION_ATTEMPTS {
             match Self::__generate(width, height, rng) {
                 Ok(grid) => {
-                    if grid.is_full() {
-                        return Ok(grid);
-                    } else {
+                    // ensure edges are all covered
+                    if !grid.is_full() {
                         continue;
                     }
+
+                    // ensure that there are not too many corner islands
+                    let mut forced_corners = 0;
+                    for island in grid.islands.keys() {
+                        let visible_neighbors = grid.count_visible_neighbors(*island);
+                        if visible_neighbors == 2 {
+                            forced_corners += 1;
+                        }
+                    }
+                    if forced_corners as f32 > (grid.islands.len() as f32 * 0.4) {
+                        continue;
+                    }
+
+                    return Ok(grid);
                 }
                 Err(_e) => {
                     continue;
@@ -449,6 +462,44 @@ impl HashiGrid {
         }
 
         Ok(grid)
+    }
+
+    fn count_visible_neighbors(&self, pos: Position) -> u8 {
+        let mut count = 0;
+        // Check each direction for nearest island
+        // Up
+        for y in (0..pos.y).rev() {
+            let check_pos = Position { x: pos.x, y };
+            if self.islands.contains_key(&check_pos) {
+                count += 1;
+                break;
+            }
+        }
+        // Down
+        for y in (pos.y + 1)..self.height {
+            let check_pos = Position { x: pos.x, y };
+            if self.islands.contains_key(&check_pos) {
+                count += 1;
+                break;
+            }
+        }
+        // Left
+        for x in (0..pos.x).rev() {
+            let check_pos = Position { x, y: pos.y };
+            if self.islands.contains_key(&check_pos) {
+                count += 1;
+                break;
+            }
+        }
+        // Right
+        for x in (pos.x + 1)..self.width {
+            let check_pos = Position { x, y: pos.y };
+            if self.islands.contains_key(&check_pos) {
+                count += 1;
+                break;
+            }
+        }
+        count
     }
 
     fn can_add_island(&self, position: Position) -> Result<(), HashiError> {
