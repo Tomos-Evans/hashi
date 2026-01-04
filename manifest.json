@@ -1,0 +1,26 @@
+{
+  "name": "Hashi Puzzle Game",
+  "short_name": "Hashi",
+  "description": "A Hashi (Bridges) puzzle game",
+  "start_url": "/hashi/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4a90e2",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/hashi/images/192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/hashi/images/512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["games", "entertainment"],
+  "lang": "en-US"
+}
