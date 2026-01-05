@@ -73,6 +73,34 @@ body {
     align-items: stretch;
 }
 
+.home-footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #999;
+}
+
+.github-link {
+    color: #999;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.github-link:hover {
+    color: #0b7dda;
+    text-decoration: underline;
+}
+
+.build-date {
+    color: #d1d1d1;
+    font-size: 12px;
+}
+
 /* ==================== Buttons ==================== */
 
 .btn {
@@ -465,5 +493,14 @@ body {
     .game-timer {
         font-size: 24px;
         min-width: 80px;
+    }
+
+    .home-footer {
+        margin-top: 50px;
+        font-size: 14px;
+    }
+
+    .build-date {
+        font-size: 13px;
     }
 }

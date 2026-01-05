@@ -2,6 +2,8 @@ use crate::Route;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
+const BUILD_DATE: &str = env!("BUILD_DATE");
+
 #[function_component(Home)]
 pub fn home() -> Html {
     let navigator = use_navigator().unwrap();
@@ -35,7 +37,7 @@ pub fn home() -> Html {
 
     html! {
         <div class="home-container">
-            <h1 class="home-title">{"Hashi Puzzle Game"}</h1>
+            <h1 class="home-title">{"Hashi!"}</h1>
             <p class="home-subtitle">
                 {"Connect the islands with bridges following the puzzle rules"}
             </p>
@@ -50,6 +52,12 @@ pub fn home() -> Html {
                     {"View Rules"}
                 </button>
             </div>
+            <footer class="home-footer">
+                <a href="https://github.com/tomos-evans/hashi" target="_blank" rel="noopener noreferrer" class="github-link">
+                    {"View on GitHub"}
+                </a>
+                <span class="build-date">{format!("Built: {}", BUILD_DATE)}</span>
+            </footer>
         </div>
     }
 }
